@@ -3,11 +3,10 @@ avg the state dict by keys
 env init: poisson -> init velocity -> init vehicle velocity
 env update: vehicle position -> add/remove -> update velocity -> update vehicle states
 
-
-
 # data rate
 
-$$ \huge
+$$
+\huge
 S_{V_{i}^r} = B_{i, R_j} \cdot \log_2(1 + \frac{P_{R_j} \cdot h_i^r(V_{i}^r, R_j)}{\sigma^2})
 $$
 
@@ -19,7 +18,8 @@ $$
 
 # channel gain
 
-$$ \huge
+$$
+\huge
 128.1 + 37.6 \cdot \log_{10}(d(V_{i}^r, R_j)) + X
 $$
 
