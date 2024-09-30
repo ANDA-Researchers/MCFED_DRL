@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import truncnorm
 from library import ContentLibrary
-from mobility import Vehicle
+from vehicle import Vehicle
 from model import AutoEncoder
 from utils import cal_distance
 
@@ -17,6 +17,7 @@ class RSU:
         self.position = position
         self.distance_from_bs = distance_from_bs
         self.capacity = capacity
+        self.cache = []
 
     def __repr__(self) -> str:
         return f"id: {self.position}, capacity: {self.capacity}"
@@ -37,6 +38,7 @@ class Environment:
         time_step: int = 1,
         bs_position: tuple = BS_POSITION,
         rsu_highway_distance: float = 1,
+        gpu: int = 0,
     ) -> None:
         self._validate_parameters(
             min_velocity, max_velocity, num_rsu, rsu_coverage, road_length
@@ -49,6 +51,8 @@ class Environment:
         self.current_time = 0
         self.content_library = ContentLibrary(DATA_PATH)
         self.global_model = self.init_model()
+        self.communication = None
+        self.gpu = gpu
 
         # RSU
         self.rsu_coverage = rsu_coverage
@@ -108,6 +112,7 @@ class Environment:
             user_info,
             user_data,
             self.init_model(),
+            self.gpu,
         )
         self.vehicles.append(vehicle)
         return vehicle
@@ -122,7 +127,7 @@ class Environment:
             RSU(
                 (
                     (i + 1) * self.rsu_coverage - self.rsu_coverage / 2,
-                    self.road_width + self.rsu_highway_distance,
+                    self.road_width // 2,
                 ),
                 self.rsu_capacity,
                 cal_distance(
@@ -165,6 +170,10 @@ class Environment:
         mean = sum([vehicle.velocity for vehicle in self.vehicles]) / len(self.vehicles)
         for vehicle in self.vehicles:
             vehicle.update_velocity(self.truncated_gaussian(mean))
+
+    def _update_vehicle_requests(self) -> None:
+        for vehicle in self.vehicles:
+            vehicle.update_request()
 
     def step(self) -> None:
         self._update_vehicle_positions()

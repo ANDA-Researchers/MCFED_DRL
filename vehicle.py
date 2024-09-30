@@ -1,24 +1,29 @@
 import copy
 import numpy as np
 import torch
+import torch.optim as optim
 
 
 class Vehicle:
-    def __init__(self, position, velocity, user_id, info, data, model) -> None:
+    def __init__(self, position, velocity, user_id, info, data, model, gpu=0) -> None:
         self.user_id = user_id
         self.position = position
         self.velocity = velocity
         self.data = data
         self.info = info
         self.divider = int(len(data["contents"]) * 0.8)
+        self.gpu = gpu
 
         self.input_shape = self.data["max"] + 1
 
         # load the model architecture
-        self.model = model
+        if gpu != -1:
+            self.model = model.cuda("cuda:" + str(gpu))
+        else:
+            self.model = model
 
         # generate request from the test set
-        self.current_request = self.generate_request()
+        self.current_request = self.request()
 
     def __repr__(self) -> str:
         return (
@@ -33,7 +38,7 @@ class Vehicle:
 
     def update_request(self):
         self.divider += 1
-        self.current_request = self.generate_request()
+        self.current_request = self.request()
 
     def create_ratings_matrix(self):
         matrix = []
@@ -44,30 +49,39 @@ class Vehicle:
                 matrix.append(0)
         return np.array(matrix)
 
-    def generate_request(self):
-        return np.random.choice(self.data["contents"][self.divider :])
+    def request(self):
+        return self.data["contents"][self.divider]
 
     def predict(self):
         self.model.eval()
-        input = torch.tensor(self.create_ratings_matrix()).float()
-        return self.model(input)
+        _input = torch.tensor(self.create_ratings_matrix()).float()
+
+        if self.gpu != -1:
+            _input = _input.cuda("cuda:" + str(self.gpu))
+
+        output = self.model(_input)
+        output = output.cpu().detach().numpy()
+
+        return output
 
     def local_update(self):
         self.model.train()
         criterion = torch.nn.L1Loss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
+        optimizer = optim.SGD(self.model.parameters(), lr=0.01)
 
-        input = torch.tensor(self.create_ratings_matrix()).float()
+        _input = torch.tensor(self.create_ratings_matrix()).float()
+        if self.gpu != -1:
+            _input = _input.cuda("cuda:" + str(self.gpu))
 
         patience = 10
         best_loss = float("inf")
         epochs_no_improve = 0
         best_weights = copy.deepcopy(self.model.state_dict())
 
-        for _ in range(4):
+        for _ in range(10):
             optimizer.zero_grad()
-            output = self.model(input)
-            loss = criterion(output, input)
+            output = self.model(_input)
+            loss = criterion(output, _input)
             loss.backward()
             optimizer.step()
 
@@ -83,10 +97,11 @@ class Vehicle:
                 break
 
         self.model.load_state_dict(best_weights)
-        return output
 
     def get_weights(self):
-        return self.model.state_dict()
+        weights = self.model.state_dict()
+        weights = {k: v.cpu() for k, v in weights.items()}
+        return weights
 
     def set_weights(self, weights):
         self.model.load_state_dict(weights)
