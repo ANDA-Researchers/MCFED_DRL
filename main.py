@@ -27,9 +27,11 @@ def parse_args():
     parser.add_argument("--num_rounds", type=int, default=30)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--content_size", type=int, default=800)
-    # cloud data rate in Mbps
     parser.add_argument("--cloud_rate", type=float, default=1e6)
     parser.add_argument("--fiber_rate", type=float, default=15e6)
+    parser.add_argument(
+        "--content_handler", type=str, default="fl", choices=["fl", "random"]
+    )
 
     return parser.parse_args()
 
