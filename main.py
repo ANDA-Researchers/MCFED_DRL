@@ -1,9 +1,12 @@
 import argparse
+from ast import parse
 from audioop import avg
 import concurrent.futures
+from importlib.metadata import distribution
 import re
 from turtle import delay
 import numpy as np
+from sympy import per
 from communication import Communication
 from environment import Environment
 from utils import cal_distance_matrix, average_weights
@@ -26,11 +29,15 @@ def parse_args():
     parser.add_argument("--time_step_per_round", type=int, default=10)
     parser.add_argument("--num_rounds", type=int, default=30)
     parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--parallel_update", type=bool, default=True)
     parser.add_argument("--content_size", type=int, default=800)
-    parser.add_argument("--cloud_rate", type=float, default=1e6)
+    parser.add_argument("--cloud_rate", type=float, default=10e6)
     parser.add_argument("--fiber_rate", type=float, default=15e6)
     parser.add_argument(
         "--content_handler", type=str, default="fl", choices=["fl", "random"]
+    )
+    parser.add_argument(
+        "--va_decision", type=str, default="random", choices=["random", "drl"]
     )
 
     return parser.parse_args()
@@ -55,8 +62,14 @@ def main():
     global_delays = []
 
     for timestep in range(args.num_rounds * args.time_step_per_round):
-        # Compute distance matrix
+
+        # State: Compute distance matrix
         distance_matrix = cal_distance_matrix(env.vehicles, env.rsu)
+
+        # Compute hypotenuse distance
+        hypotenuse_distance = np.sqrt(
+            (args.rsu_coverage // 2) ** 2 + (args.road_width // 2) ** 2
+        )
 
         # Get communication status
         env.communication = Communication(distance_matrix)
@@ -65,9 +78,7 @@ def main():
         coverage = {k: [] for k in range(args.num_rsu)}
         for i in range(args.num_vehicles):
             for j in range(args.num_rsu):
-                if env.communication.distance_matrix[i][j] < np.sqrt(
-                    (args.rsu_coverage // 2) ** 2 + (args.road_width // 2) ** 2
-                ):
+                if env.communication.distance_matrix[i][j] < hypotenuse_distance:
                     coverage[j].append(i)
 
         reverse_coverage = {v: k for k, l in coverage.items() for v in l}
@@ -84,25 +95,23 @@ def main():
             ]
 
             # Perform FL
-            FL(args, env, timestep, coverage)
+            if args.content_handler == "fl":
+                fl_cache(args, env, timestep, coverage)
+            elif args.content_handler == "random":
+                random_cache(args, env, timestep, coverage)
 
-            # Random cache replacement
-            # random_cache(args, env, timestep, coverage)
-
-        # request matrix
+        # sampling round's requests
         request_matrix = np.zeros(
             (args.num_vehicles, len(env.content_library.total_items))
         )
 
+        # State: request matrix
         for idx, ts in enumerate(requests):
             if ts == timestep % args.time_step_per_round:
                 request_matrix[idx][env.vehicles[idx].request()] = 1
 
         # get action matrix
-        actions = np.random.random(args.num_vehicles * (args.num_rsu + 1)).reshape(
-            args.num_vehicles, (args.num_rsu + 1)
-        )
-
+        actions = random_delivery(args)
         actions = np.argmax(actions, axis=1)
 
         delays = []
@@ -114,9 +123,7 @@ def main():
                 vehicle = env.vehicles[idx]
                 local_rsu = reverse_coverage[idx]
                 requested_content = vehicle.request()
-                wireless_rate = env.communication.calculate_V2R_data_rate(
-                    vehicle, env.rsu[local_rsu], idx, local_rsu
-                )
+                wireless_rate = env.communication.get_data_rate(idx, local_rsu)
 
                 wireless_delay = args.content_size / wireless_rate
                 fiber_delay = args.content_size / args.fiber_rate
@@ -139,10 +146,17 @@ def main():
                 f"Timestep {timestep//args.time_step_per_round + 1}, avg delay: {np.mean(delays)}"
             )
             global_delays.extend(delays)
+
         # Update the environment
         env.step()
 
     print(f"Average delay: {np.mean(global_delays)}")
+
+
+def random_delivery(args):
+    return np.random.random(args.num_vehicles * (args.num_rsu + 1)).reshape(
+        args.num_vehicles, (args.num_rsu + 1)
+    )
 
 
 def random_cache(args, env, timestep, coverage):
@@ -153,21 +167,23 @@ def random_cache(args, env, timestep, coverage):
         )
 
 
-def FL(args, env, timestep, coverage):
+def fl_cache(args, env, timestep, coverage):
     print(f"Round {timestep // args.time_step_per_round + 1}, performing FL")
 
-    # Select vehicles to join the Federated Learning
+    # TODO: Select vehicles to join the Federated Learning
     selected_vehicles = env.vehicles
 
-    # Local update: perform in parallel
-    def local_update(vehicle):
-        vehicle.local_update()
+    # Local update:
+    if args.parallel_update:
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        executor.map(local_update, selected_vehicles)
+        def local_update(vehicle):
+            vehicle.local_update()
 
-    # for vehicle in selected_vehicles:
-    #     vehicle.local_update()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(local_update, selected_vehicles)
+    else:
+        for vehicle in selected_vehicles:
+            vehicle.local_update()
 
     # Get the weights then flatten
     weights = [vehicle.get_weights() for vehicle in selected_vehicles]
