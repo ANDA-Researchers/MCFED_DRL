@@ -1,11 +1,13 @@
 import numpy as np
 
+from utils import cal_distance, cal_distance_matrix
+
 
 class Communication:
-    def __init__(self, distance_matrix):
+    def __init__(self, vehicle, rsu):
 
-        self.distance_matrix = distance_matrix
-        self.num_vehicle, self.num_rsu = distance_matrix.shape
+        self.distance_matrix = cal_distance_matrix(vehicle, rsu)
+        self.num_vehicle, self.num_rsu = self.distance_matrix.shape
 
         self.B_sub = 540e3  # in Hz
         self.shadow_std = 8  # in dB
@@ -49,6 +51,7 @@ class Communication:
             / 10
         )
 
+        # Noise power in Watt
         noise_power_watt = 10 ** (self.noise_power_dBm / 10)
 
         # Calculate data rate using Shannon capacity formula

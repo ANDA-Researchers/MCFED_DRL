@@ -22,9 +22,6 @@ class Vehicle:
         else:
             self.model = model
 
-        # generate request from the test set
-        self.current_request = self.request()
-
     def __repr__(self) -> str:
         return (
             f"id: {self.user_id}, position: {self.position}, velocity: {self.velocity}"
@@ -38,7 +35,6 @@ class Vehicle:
 
     def update_request(self):
         self.divider += 1
-        self.current_request = self.request()
 
     def create_ratings_matrix(self):
         matrix = []
@@ -49,6 +45,7 @@ class Vehicle:
                 matrix.append(0)
         return np.array(matrix)
 
+    @property
     def request(self):
         return self.data["contents"][self.divider]
 

@@ -1,16 +1,11 @@
 import argparse
-from ast import parse
-from audioop import avg
-import concurrent.futures
-from importlib.metadata import distribution
-import re
-from turtle import delay
 import numpy as np
-from sympy import per
+from sklearn import neighbors
+from caching import fl_cache, random_cache
 from communication import Communication
 from environment import Environment
-from utils import cal_distance_matrix, average_weights
-from cluster import clustering
+from vehicle import Vehicle
+from delivery import random_delivery
 
 
 def parse_args():
@@ -63,16 +58,13 @@ def main():
 
     for timestep in range(args.num_rounds * args.time_step_per_round):
 
-        # State: Compute distance matrix
-        distance_matrix = cal_distance_matrix(env.vehicles, env.rsu)
+        # Get channel status
+        env.communication = Communication(env.vehicles, env.rsu)
 
         # Compute hypotenuse distance
         hypotenuse_distance = np.sqrt(
             (args.rsu_coverage // 2) ** 2 + (args.road_width // 2) ** 2
         )
-
-        # Get communication status
-        env.communication = Communication(distance_matrix)
 
         # Get coverage
         coverage = {k: [] for k in range(args.num_rsu)}
@@ -86,7 +78,7 @@ def main():
         # Round trigger
         if timestep % args.time_step_per_round == 0:
 
-            # Generate requests
+            # sampling round's requests
             requests = [
                 int(reg)
                 for reg in np.random.uniform(
@@ -100,30 +92,28 @@ def main():
             elif args.content_handler == "random":
                 random_cache(args, env, timestep, coverage)
 
-        # sampling round's requests
+        # State: request matrix
         request_matrix = np.zeros(
             (args.num_vehicles, len(env.content_library.total_items))
         )
-
-        # State: request matrix
         for idx, ts in enumerate(requests):
             if ts == timestep % args.time_step_per_round:
-                request_matrix[idx][env.vehicles[idx].request()] = 1
+                request_matrix[idx][env.vehicles[idx].request] = 1
 
         # get action matrix
         actions = random_delivery(args)
-        actions = np.argmax(actions, axis=1)
+
+        # actions = greedy_delivery(args, env, timestep, reverse_coverage, requests)
 
         delays = []
 
-        # for each vehicle that requests in this time step, print their desired request
-        for idx, ts in enumerate(requests):
+        # Compute delay
+        for vehicle_idx, ts in enumerate(requests):
             if ts == timestep % args.time_step_per_round:
-                action = actions[idx]
-                vehicle = env.vehicles[idx]
-                local_rsu = reverse_coverage[idx]
-                requested_content = vehicle.request()
-                wireless_rate = env.communication.get_data_rate(idx, local_rsu)
+                action = int(actions[vehicle_idx])
+                local_rsu = reverse_coverage[vehicle_idx]
+                requested_content = env.vehicles[vehicle_idx].request
+                wireless_rate = env.communication.get_data_rate(vehicle_idx, local_rsu)
 
                 wireless_delay = args.content_size / wireless_rate
                 fiber_delay = args.content_size / args.fiber_rate
@@ -143,7 +133,7 @@ def main():
 
         if len(delays) > 0:
             print(
-                f"Timestep {timestep//args.time_step_per_round + 1}, avg delay: {np.mean(delays)}"
+                f"Timestep {timestep%args.time_step_per_round + 1}, avg delay: {np.mean(delays)}"
             )
             global_delays.extend(delays)
 
@@ -153,71 +143,26 @@ def main():
     print(f"Average delay: {np.mean(global_delays)}")
 
 
-def random_delivery(args):
-    return np.random.random(args.num_vehicles * (args.num_rsu + 1)).reshape(
-        args.num_vehicles, (args.num_rsu + 1)
-    )
+def greedy_delivery(args, env, timestep, reverse_coverage, requests):
+    actions = np.zeros(args.num_vehicles)
+    for vehicle_idx, ts in enumerate(requests):
+        if ts == timestep % args.time_step_per_round:
+            requested_content = env.vehicles[vehicle_idx].request
+            all_rsus = env.rsu
+            local_rsu_idx = reverse_coverage[vehicle_idx]
+            local_rsu = all_rsus[local_rsu_idx]
+            neighbor_rsus = [
+                (rsu, idx) for idx, rsu in enumerate(all_rsus) if idx != local_rsu
+            ]
 
-
-def random_cache(args, env, timestep, coverage):
-
-    for rsu in env.rsu:
-        rsu.cache = np.random.choice(
-            env.content_library.total_items, rsu.capacity, replace=False
-        )
-
-
-def fl_cache(args, env, timestep, coverage):
-    print(f"Round {timestep // args.time_step_per_round + 1}, performing FL")
-
-    # TODO: Select vehicles to join the Federated Learning
-    selected_vehicles = env.vehicles
-
-    # Local update:
-    if args.parallel_update:
-
-        def local_update(vehicle):
-            vehicle.local_update()
-
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.map(local_update, selected_vehicles)
-    else:
-        for vehicle in selected_vehicles:
-            vehicle.local_update()
-
-    # Get the weights then flatten
-    weights = [vehicle.get_weights() for vehicle in selected_vehicles]
-    flattened_weights = [
-        np.concatenate([np.array(v).flatten() for v in w.values()]) for w in weights
-    ]
-
-    # Clustering
-    clusters = []
-    for i in range(args.num_rsu):
-        if len(coverage[i]) >= args.num_clusters:
-            cluster, _ = clustering(
-                args.num_clusters, [flattened_weights[j] for j in coverage[i]]
-            )
-        else:
-            cluster, _ = clustering(1, [flattened_weights[j] for j in coverage[i]])
-
-        cluster = [[coverage[i][j] for j in c] for c in cluster]
-        clusters.extend(cluster)
-
-    # Perform global aggregation then download to vehicles
-    for cluster in clusters:
-        cluster_weights = average_weights([weights[i] for i in cluster])
-        for idx in cluster:
-            env.vehicles[idx].set_weights(cluster_weights)
-
-    # Cache replacement
-    for r in range(args.num_rsu):
-        predictions = [env.vehicles[i].predict() for i in coverage[r]]
-        if len(predictions) == 0:
-            continue
-        popularity = np.mean(predictions, axis=0)
-        cache = np.argsort(popularity)[::-1][: env.rsu[r].capacity]
-        env.rsu[r].cache = cache
+            if requested_content in local_rsu.cache:
+                actions[vehicle_idx] = local_rsu_idx + 1
+            else:
+                for rsu, idx in neighbor_rsus:
+                    if requested_content in rsu.cache:
+                        actions[vehicle_idx] = idx + 1
+                        break
+    return actions
 
 
 if __name__ == "__main__":
