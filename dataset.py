@@ -15,7 +15,7 @@ class Library:
     def __init__(self, num_clients) -> None:
         if "ml-1m" not in os.listdir("./data"):
             print("Dataset not found. Downloading from grouplens...")
-            self.download_dataset()
+            download_dataset()
         else:
             print("Dataset found. Loading...")
 
