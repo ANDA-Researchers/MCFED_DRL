@@ -13,7 +13,7 @@ def average_weights(w):
 
 
 def cal_distance(a, b):
-    return np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+    return abs(a - b)
 
 
 def cal_distance_matrix(vehicles, rsus):

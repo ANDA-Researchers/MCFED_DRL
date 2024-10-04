@@ -1,31 +1,42 @@
 import copy
+from urllib import request
 import numpy as np
 import torch
 import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
 
 
 class Vehicle:
-    def __init__(self, position, velocity, user_id, info, data, model, gpu=0) -> None:
-        self.user_id = user_id
+    def __init__(self, position, velocity, data, model, gpu=0, writer=None) -> None:
+        self.data = data
+        # mobility parameters
         self.position = position
         self.velocity = velocity
-        self.data = data
-        self.info = info
-        self.divider = int(len(data["contents"]) * 0.8)
-        self.gpu = gpu
-
-        self.input_shape = self.data["max"] + 1
-
+        self.writer = writer
         # load the model architecture
         if gpu != -1:
-            self.model = model.cuda("cuda:" + str(gpu))
+            self.device = torch.device("cuda:" + str(gpu))
         else:
-            self.model = model
+            self.device = torch.device("cpu")
 
-    def __repr__(self) -> str:
-        return (
-            f"id: {self.user_id}, position: {self.position}, velocity: {self.velocity}"
+        self.model = model.to(self.device)
+
+        self.train_cosine, self.train_semantic, self.train_labels, self.train_ids = (
+            self.data["train"]
         )
+        self.test_cosine, self.test_semantic, self.test_labels, self.test_ids = (
+            self.data["test"]
+        )
+        self.uid = self.data["uid"]
+        (
+            self.request_cosine,
+            self.request_semantic,
+            self.request_labels,
+            self.request_ids,
+        ) = self.data["request"]
+
+        self.request = np.random.choice(self.request_ids)
+        self.movies = self.data["movies"]
 
     def update_velocity(self, velocity):
         self.velocity = velocity
@@ -34,65 +45,70 @@ class Vehicle:
         self.position = position
 
     def update_request(self):
-        self.divider += 1
-
-    def create_ratings_matrix(self):
-        matrix = []
-        for i in range(self.data["max"] + 1):
-            if i in self.data["contents"][: self.divider]:
-                matrix.append(1)
-            else:
-                matrix.append(0)
-        return np.array(matrix)
-
-    @property
-    def request(self):
-        return self.data["contents"][self.divider]
+        self.request = np.random.choice(self.request_ids)
 
     def predict(self):
         self.model.eval()
-        _input = torch.tensor(self.create_ratings_matrix()).float()
+        with torch.no_grad():
+            for idx, movie_id in enumerate(self.request_ids):
+                self.movies[movie_id] = self.model(
+                    torch.tensor(np.array([self.request_semantic[idx]]))
+                    .float()
+                    .to(self.device),
+                )
+        return self.movies
 
-        if self.gpu != -1:
-            _input = _input.cuda("cuda:" + str(self.gpu))
-
-        output = self.model(_input)
-        output = output.cpu().detach().numpy()
-
-        return output
-
-    def local_update(self):
+    def local_update(self, round):
         self.model.train()
         criterion = torch.nn.L1Loss()
-        optimizer = optim.SGD(self.model.parameters(), lr=0.01)
+        optimizer = optim.Adam(self.model.parameters(), lr=0.001)
 
-        _input = torch.tensor(self.create_ratings_matrix()).float()
-        if self.gpu != -1:
-            _input = _input.cuda("cuda:" + str(self.gpu))
+        # merge x_train and x_test
+        X = (
+            torch.tensor(np.concatenate([self.train_semantic, self.test_semantic]))
+            .float()
+            .to(self.device)
+        )
+        Y = (
+            torch.tensor(np.concatenate([self.train_labels, self.test_labels]))
+            .float()
+            .to(self.device)
+        )
+
+        train_dataset = torch.utils.data.TensorDataset(X, Y)
+
+        train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
 
         patience = 10
         best_loss = float("inf")
         epochs_no_improve = 0
         best_weights = copy.deepcopy(self.model.state_dict())
 
-        for _ in range(10):
-            optimizer.zero_grad()
-            output = self.model(_input)
-            loss = criterion(output, _input)
-            loss.backward()
-            optimizer.step()
+        for _ in range(100):
+            total_loss = 0
+            for data in train_loader:
+                optimizer.zero_grad()
+                x = data[0]
+                y = data[1]
+                outputs = self.model(x)
+                loss = criterion(outputs, y.view_as(outputs))
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item() / len(train_loader)
 
-            # Early stopping
-            if loss.item() < best_loss:
-                best_loss = loss.item()
-                epochs_no_improve = 0
+            self.writer.add_scalar(
+                f"[{round}] local_loss_uid_{self.uid}", total_loss, _
+            )
+
+            if total_loss < best_loss:
+                best_loss = total_loss
                 best_weights = copy.deepcopy(self.model.state_dict())
+                epochs_no_improve = 0
             else:
                 epochs_no_improve += 1
 
-            if epochs_no_improve >= patience:
+            if epochs_no_improve == patience:
                 break
-
         self.model.load_state_dict(best_weights)
 
     def get_weights(self):

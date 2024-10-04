@@ -5,10 +5,9 @@ import concurrent.futures
 
 
 def random_cache(args, env, timestep, coverage):
-
-    for rsu in env.rsu:
+    for rsu in env.rsus:
         rsu.cache = np.random.choice(
-            env.content_library.total_items, rsu.capacity, replace=False
+            env.library.max_movie_id + 1, rsu.capacity, replace=False
         )
 
 
@@ -22,13 +21,13 @@ def fl_cache(args, env, timestep, coverage):
     if args.parallel_update:
 
         def local_update(vehicle):
-            vehicle.local_update()
+            vehicle.local_update(round=timestep // args.time_step_per_round)
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             executor.map(local_update, selected_vehicles)
     else:
         for vehicle in selected_vehicles:
-            vehicle.local_update()
+            vehicle.local_update(round=timestep // args.time_step_per_round)
 
     # Get the weights then flatten
     weights = [vehicle.get_weights() for vehicle in selected_vehicles]
@@ -61,5 +60,7 @@ def fl_cache(args, env, timestep, coverage):
         if len(predictions) == 0:
             continue
         popularity = np.mean(predictions, axis=0)
-        cache = np.argsort(popularity)[::-1][: env.rsu[r].capacity]
-        env.rsu[r].cache = cache
+        cache = np.argsort(popularity)[::-1][: env.rsus[r].capacity]
+        env.rsus[r].cache = cache
+
+    pass

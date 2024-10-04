@@ -9,13 +9,13 @@ def random_delivery(args):
     return actions
 
 
-def greedy_delivery(args, env, timestep, reverse_coverage, requests):
+def greedy_delivery(args, env, timestep, requests):
     actions = np.zeros(args.num_vehicles)
     for vehicle_idx, ts in enumerate(requests):
         if ts == timestep % args.time_step_per_round:
             requested_content = env.vehicles[vehicle_idx].request
-            all_rsus = env.rsu
-            local_rsu_idx = reverse_coverage[vehicle_idx]
+            all_rsus = env.rsus
+            local_rsu_idx = env.reverse_coverage[vehicle_idx]
             local_rsu = all_rsus[local_rsu_idx]
             neighbor_rsus = [
                 (rsu, idx) for idx, rsu in enumerate(all_rsus) if idx != local_rsu

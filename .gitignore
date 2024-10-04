@@ -1,7 +1,10 @@
 .vector_cache/*
 __pycache__
-data/*
-glove.6B/*
+data/glove.6B/*
+data/
 notebook/old_processing.ipynb
 latex
 Cooperative-Caching-in-VEC-Based-on-Asynchronous-FL-and-DRL
+logs
+results
+runs
