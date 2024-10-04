@@ -38,13 +38,14 @@ def parse_args():
     parser.add_argument("--parallel_update", type=bool, default=False)
     parser.add_argument("--content_size", type=int, default=800)
     parser.add_argument("--cloud_rate", type=float, default=1e6)
-    parser.add_argument("--fiber_rate", type=float, default=2e6)
+    parser.add_argument("--fiber_rate", type=float, default=10e6)
     parser.add_argument(
         "--content_handler", type=str, default="fl", choices=["fl", "random"]
     )
     parser.add_argument(
         "--va_decision", type=str, default="drl", choices=["random", "drl", "greedy"]
     )
+    parser.add_argument("--num_steps", type=int, default=1000)
 
     return parser.parse_args()
 
@@ -114,7 +115,7 @@ def main():
             )
 
             # train DRL model
-            for step in range(1, 50):
+            for step in range(1, args.num_steps + 1):
                 actions = agent.select_action(state, args, timestep, env)
 
                 delays, total_request, total_hits = compute_delay(
@@ -124,7 +125,7 @@ def main():
                 hit_rate = total_hits / total_request if total_request != 0 else 0
 
                 next_state = env.state
-                done = True if step == 50 else False
+                done = True if step == args.num_steps else False
                 agent.replay_buffer.push(
                     state,
                     actions,
@@ -137,7 +138,7 @@ def main():
                     done,
                 )
                 state = next_state
-                agent.train(batch_size=256)
+                agent.train(batch_size=1024)
                 if done:
                     break
 
