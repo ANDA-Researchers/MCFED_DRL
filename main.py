@@ -47,7 +47,6 @@ def parse_args():
         "--va_decision", type=str, default="drl", choices=["random", "drl", "greedy"]
     )
     parser.add_argument("--num_steps", type=int, default=1000)
-
     return parser.parse_args()
 
 
