@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader, Dataset
 class Vehicle:
     def __init__(self, position, velocity, data, model, gpu=0, writer=None) -> None:
         self.data = data
+        self.user_info = data["user_info"]
         # mobility parameters
         self.position = position
         self.velocity = velocity
@@ -37,6 +38,7 @@ class Vehicle:
 
         self.request = np.random.choice(self.request_ids)
         self.movies = self.data["movies"]
+        a = self.get_flatten_weights()
 
     def update_velocity(self, velocity):
         self.velocity = velocity
@@ -56,6 +58,7 @@ class Vehicle:
                     .float()
                     .to(self.device),
                 )
+        output = torch.sigmoid(self.movies)
         return self.movies
 
     def local_update(self, round):
@@ -96,9 +99,9 @@ class Vehicle:
                 optimizer.step()
                 total_loss += loss.item() / len(train_loader)
 
-            self.writer.add_scalar(
-                f"[{round}] local_loss_uid_{self.uid}", total_loss, _
-            )
+            # self.writer.add_scalar(
+            #     f"[{round}] local_loss_uid_{self.uid}", total_loss, _
+            # )
 
             if total_loss < best_loss:
                 best_loss = total_loss
@@ -107,8 +110,8 @@ class Vehicle:
             else:
                 epochs_no_improve += 1
 
-            if epochs_no_improve == patience:
-                break
+            # if epochs_no_improve == patience:
+            #     break
         self.model.load_state_dict(best_weights)
 
     def get_weights(self):
@@ -118,3 +121,9 @@ class Vehicle:
 
     def set_weights(self, weights):
         self.model.load_state_dict(weights)
+
+    def get_flatten_weights(self):
+        weights = self.model.state_dict()
+        return torch.cat(
+            [v.view(-1) for k, v in weights.items()] + [self.user_info.to(self.device)]
+        )

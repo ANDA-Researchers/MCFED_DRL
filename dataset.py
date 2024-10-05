@@ -18,7 +18,6 @@ class Library:
             download_dataset()
         else:
             print("Dataset found. Loading...")
-
         self.ratings, self.user_info = load_ratings()
         self.sparse_vecs, self.semantic_vecs = load_movies()
         self.cosine_sparse_matrix, self.cosine_semantic_matrix = (
@@ -38,7 +37,7 @@ class Library:
         history, ratings = self.get_inputs(choosen)
 
         end_train = int(len(history) * 0.8)
-        end_test = int(len(history) * 0.9)
+        end_test = int(len(history) * 0.99)
 
         cosine_inputs = [self.cosine_semantic_matrix[his - 1] for his in history]
         semantic_inputs = [self.semantic_vecs[his - 1] for his in history]
@@ -65,6 +64,9 @@ class Library:
             "request": (request_cosine, request_semantic, request_labels, request_ids),
             "movies": torch.zeros((self.max_movie_id + 1)),
             "uid": choosen,
+            "user_info": torch.tensor(
+                self.user_info[self.user_info["user_id"] == choosen].values[0]
+            ),
         }
 
     def get_inputs(self, user_id, request_ratio=0):

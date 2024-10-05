@@ -16,15 +16,15 @@ class DuelingDQN(nn.Module):
         self.num_rsu = num_rsu
 
         # Common feature extraction layers
-        self.fc1 = nn.Linear(state_dim, 1024)
-        self.fc2 = nn.Linear(1024, 512)
+        self.fc1 = nn.Linear(state_dim, 512)
+        self.fc2 = nn.Linear(512, 128)
 
         # Value stream
-        self.value_stream = nn.Linear(512, 1)  # Outputs a scalar value
+        self.value_stream = nn.Linear(128, 1)  # Outputs a scalar value
 
         # Advantage stream
         self.advantage_stream = nn.Linear(
-            512, num_vehicles * (num_rsu + 1)
+            128, num_vehicles * (num_rsu + 1)
         )  # Output dimension (num_vehicles, num_rsu + 1)
 
     def forward(self, x):
@@ -78,7 +78,7 @@ class DuelingDQNAgent:
         device=-1,
         writer=None,
     ):
-        self.device = torch.device(f"cuda:{device}" if device != -1 else "cpu")
+        self.device = torch.device(f"cuda" if device != -1 else "cpu")
         self.num_vehicles = num_vehicles
         self.num_rsu = num_rsu
         self.gamma = gamma
@@ -106,28 +106,7 @@ class DuelingDQNAgent:
             -1.0 * self.steps_done / self.epsilon_decay
         )
         if random.random() < self.epsilon:
-            actions = np.zeros(args.num_vehicles)
-            for vehicle_idx, ts in enumerate(env.requests):
-                if ts == timestep % args.time_step_per_round:
-                    requested_content = env.vehicles[vehicle_idx].request
-                    all_rsus = env.rsus
-                    local_rsu_idx = env.reverse_coverage[vehicle_idx]
-                    local_rsu = all_rsus[local_rsu_idx]
-                    neighbor_rsus = [
-                        (rsu, idx)
-                        for idx, rsu in enumerate(all_rsus)
-                        if idx != local_rsu
-                    ]
-
-                    if requested_content in local_rsu.cache:
-                        actions[vehicle_idx] = local_rsu_idx + 1
-                    else:
-                        for rsu, idx in neighbor_rsus:
-                            if requested_content in rsu.cache:
-                                actions[vehicle_idx] = idx + 1
-                                break
-
-            return actions  # Shape: (num_vehicles,)
+            return np.random.randint(0, self.num_rsu + 1, size=(self.num_vehicles,))
         else:
             # Exploitation: Select actions based on Q-values
             state = torch.FloatTensor(state).unsqueeze(0).to(self.device)

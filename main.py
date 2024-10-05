@@ -1,5 +1,6 @@
 import argparse
 import numpy as np
+from tqdm import tqdm
 from caching import fl_cache, random_cache
 from communication import Communication
 from drl import DuelingDQN, DuelingDQNAgent
@@ -29,7 +30,7 @@ def parse_args():
     parser.add_argument("--rsu_coverage", type=int, default=500)
     parser.add_argument("--rsu_capacity", type=int, default=100)
     parser.add_argument("--num_rsu", type=int, default=4)
-    parser.add_argument("--num_vehicles", type=int, default=15)
+    parser.add_argument("--num_vehicles", type=int, default=40)
     parser.add_argument("--time_step", type=int, default=1)
     parser.add_argument("--num_clusters", type=int, default=2)
     parser.add_argument("--time_step_per_round", type=int, default=10)
@@ -37,8 +38,8 @@ def parse_args():
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--parallel_update", type=bool, default=False)
     parser.add_argument("--content_size", type=int, default=800)
-    parser.add_argument("--cloud_rate", type=float, default=1e6)
-    parser.add_argument("--fiber_rate", type=float, default=10e6)
+    parser.add_argument("--cloud_rate", type=float, default=2e6)
+    parser.add_argument("--fiber_rate", type=float, default=15e6)
     parser.add_argument(
         "--content_handler", type=str, default="fl", choices=["fl", "random"]
     )
@@ -115,7 +116,7 @@ def main():
             )
 
             # train DRL model
-            for step in range(1, args.num_steps + 1):
+            for step in tqdm(range(args.num_steps), desc="Training DRL"):
                 actions = agent.select_action(state, args, timestep, env)
 
                 delays, total_request, total_hits = compute_delay(
@@ -129,20 +130,16 @@ def main():
                 agent.replay_buffer.push(
                     state,
                     actions,
-                    (
-                        1 / ((sum(delays) * 1e6 / total_request) + 0.0001) + hit_rate
-                        if total_request != 0
-                        else 0
-                    ),
+                    (-(sum(delays) * 1e3 / total_request) if total_request != 0 else 0),
                     next_state,
                     done,
                 )
                 state = next_state
-                agent.train(batch_size=1024)
+                agent.train(batch_size=32)
                 if done:
                     break
 
-            if timestep % 10 == 0:
+            if timestep % args.time_step_per_round == 0:
                 agent.update_target_network()
             # inference DRL model
 

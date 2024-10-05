@@ -1,11 +1,16 @@
+from networkx import center
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+from sympy import centroid
 
 
 def clustering(clients_num, flattened_weights):
     if len(flattened_weights) == 0:
         return [], 0
     else:
+        flattened_weights = [
+            weight.cpu().detach().numpy() for weight in flattened_weights
+        ]
         if clients_num is None:
             silhouette_score_lst = []
             for n_clusters in range(2, len(flattened_weights)):
@@ -30,4 +35,5 @@ def clustering(clients_num, flattened_weights):
             for sublist_index in range(best_n_clusters)
         ]
 
-        return clusters_veh, best_n_clusters
+        centroids = kmeans.cluster_centers_
+        return clusters_veh, best_n_clusters, centroids

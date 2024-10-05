@@ -15,6 +15,7 @@ class RSU:
         self.capacity = capacity
         self.cache = np.random.randint(1, 3952, capacity)
         self.model = model
+        self.cluster = None
 
     def __repr__(self) -> str:
         return f"id: {self.position}, capacity: {self.capacity}"
@@ -214,6 +215,6 @@ class Environment:
                 positions_state,  # num_vehicles * num_rsu
                 request_matrix.flatten(),  # num_vehicles * num_movies
                 channel_status,  # num_vehicles * num_rsu
-                cache_matrix.flatten(),
+                cache_matrix.flatten(),  # num_rsu * num_movies
             ]
         )
