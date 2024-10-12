@@ -29,14 +29,8 @@ class Vehicle:
             self.data["test"]
         )
         self.uid = self.data["uid"]
-        (
-            self.request_cosine,
-            self.request_semantic,
-            self.request_labels,
-            self.request_ids,
-        ) = self.data["request"]
 
-        self.request = np.random.choice(self.request_ids)
+        self.request = np.random.choice(self.test_ids)
         self.movies = self.data["movies"]
         a = self.get_flatten_weights()
 
@@ -47,36 +41,28 @@ class Vehicle:
         self.position = position
 
     def update_request(self):
-        self.request = np.random.choice(self.request_ids)
+        self.request = np.random.choice(self.test_ids)
 
     def predict(self):
         self.model.eval()
         with torch.no_grad():
-            for idx, movie_id in enumerate(self.request_ids):
+            for idx, movie_id in enumerate(self.test_ids):
                 self.movies[movie_id] = self.model(
-                    torch.tensor(np.array([self.request_semantic[idx]]))
+                    torch.tensor(np.array([self.test_semantic[idx]]))
                     .float()
                     .to(self.device),
                 )
         output = torch.sigmoid(self.movies)
         return self.movies
 
-    def local_update(self, round):
+    def local_update(self):
         self.model.train()
-        criterion = torch.nn.L1Loss()
-        optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        criterion = torch.nn.BCEWithLogitsLoss()
+        optimizer = optim.Adam(self.model.parameters(), lr=0.005)
 
         # merge x_train and x_test
-        X = (
-            torch.tensor(np.concatenate([self.train_semantic, self.test_semantic]))
-            .float()
-            .to(self.device)
-        )
-        Y = (
-            torch.tensor(np.concatenate([self.train_labels, self.test_labels]))
-            .float()
-            .to(self.device)
-        )
+        X = torch.tensor(np.array(self.train_semantic)).float().to(self.device)
+        Y = torch.tensor(np.array(self.train_labels)).float().to(self.device)
 
         train_dataset = torch.utils.data.TensorDataset(X, Y)
 
@@ -87,7 +73,7 @@ class Vehicle:
         epochs_no_improve = 0
         best_weights = copy.deepcopy(self.model.state_dict())
 
-        for _ in range(100):
+        for _ in range(200):
             total_loss = 0
             for data in train_loader:
                 optimizer.zero_grad()
@@ -99,10 +85,6 @@ class Vehicle:
                 optimizer.step()
                 total_loss += loss.item() / len(train_loader)
 
-            # self.writer.add_scalar(
-            #     f"[{round}] local_loss_uid_{self.uid}", total_loss, _
-            # )
-
             if total_loss < best_loss:
                 best_loss = total_loss
                 best_weights = copy.deepcopy(self.model.state_dict())
@@ -110,8 +92,8 @@ class Vehicle:
             else:
                 epochs_no_improve += 1
 
-            # if epochs_no_improve == patience:
-            #     break
+            if epochs_no_improve == patience:
+                break
         self.model.load_state_dict(best_weights)
 
     def get_weights(self):

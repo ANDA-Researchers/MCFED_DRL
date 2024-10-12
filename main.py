@@ -2,22 +2,58 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 from caching import fl_cache, random_cache
-from communication import Communication
-from drl import DuelingDQN, DuelingDQNAgent
+from drl import DDNQAgent
 from environment import Environment
-from vehicle import Vehicle
 from delivery import random_delivery, greedy_delivery
-import pickle as pkl
-import json
 import os
 import datetime
+import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 
-save_dir = os.path.join("results", datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-os.makedirs(save_dir, exist_ok=True)
 
+class OutputHandler:
+    def __init__(self, name, args):
+        self.args = args
+        self.created = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
+        self.delays = []
+        self.requests = []
+        self.hits = []
+        self.name = name
+        self.save_dir = os.path.join(
+            "logs",
+            f"{args.content_handler}_{self.name}_{args.rsu_capacity}_{args.num_vehicles}_{self.created}",
+        )
 
-writer = SummaryWriter(log_dir=save_dir)
+        os.makedirs(self.save_dir, exist_ok=True)
+        self.writer = SummaryWriter(log_dir=self.save_dir, flush_secs=1)
+
+    def log(self, delay, total_hits, total_request, timestep):
+        self.delays.extend(delay)
+        self.requests.append(total_request)
+        self.hits.append(total_hits)
+
+        step_avg_delay = np.mean(delay) if len(delay) != 0 else 0
+        step_hit_ratio = total_hits / total_request if total_request != 0 else 1
+
+        self.writer.add_scalar(
+            f"Average Tranmission Delay",
+            step_avg_delay,
+            timestep,
+        )
+        self.writer.add_scalar(
+            f"Average Cache Hit ratio",
+            step_hit_ratio,
+            timestep,
+        )
+
+        print(
+            f"[Timestep {timestep}] Average Tranmission Delay for {self.name}: ",
+            step_avg_delay,
+        )
+        print(
+            f"[Timestep {timestep}] Average Cache Hit ratio for {self.name}: ",
+            step_hit_ratio,
+        )
 
 
 def parse_args():
@@ -26,7 +62,6 @@ def parse_args():
     parser.add_argument("--max_velocity", type=int, default=10)
     parser.add_argument("--std_velocity", type=float, default=2.5)
     parser.add_argument("--road_length", type=int, default=2000)
-    parser.add_argument("--road_width", type=int, default=10)
     parser.add_argument("--rsu_coverage", type=int, default=500)
     parser.add_argument("--rsu_capacity", type=int, default=100)
     parser.add_argument("--num_rsu", type=int, default=4)
@@ -37,171 +72,161 @@ def parse_args():
     parser.add_argument("--num_rounds", type=int, default=30)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--parallel_update", type=bool, default=False)
-    parser.add_argument("--content_size", type=int, default=800)
-    parser.add_argument("--cloud_rate", type=float, default=2e6)
+    parser.add_argument("--content_size", type=int, default=4e6)
+    parser.add_argument("--cloud_rate", type=float, default=6e6)
     parser.add_argument("--fiber_rate", type=float, default=15e6)
-    parser.add_argument(
-        "--content_handler", type=str, default="fl", choices=["fl", "random"]
-    )
-    parser.add_argument(
-        "--va_decision", type=str, default="drl", choices=["random", "drl", "greedy"]
-    )
-    parser.add_argument("--num_steps", type=int, default=1000)
+    parser.add_argument("--deadline", type=int, default=1)
+    parser.add_argument("--max_connections", type=int, default=10)
+    parser.add_argument("--content_handler", type=str, default="fl")
+    parser.add_argument("--drl_step", type=int, default=10)
     return parser.parse_args()
 
 
+args = parse_args()
+
+
 def main():
-    args = parse_args()
+
+    drl_delivery_logger = OutputHandler("ddqn", args)
 
     env = Environment(
         min_velocity=args.min_velocity,
         max_velocity=args.max_velocity,
         std_velocity=args.std_velocity,
         road_length=args.road_length,
-        road_width=args.road_width,
         rsu_coverage=args.rsu_coverage,
         rsu_capacity=args.rsu_capacity,
         num_rsu=args.num_rsu,
         num_vehicles=args.num_vehicles,
         time_step=args.time_step,
-        writer=writer,
+        args=args,
+        gpu=args.gpu,
     )
 
-    global_delays = []
-    global_request = []
-    global_hits = []
-
-    agent = DuelingDQNAgent(
+    drl_agent = DDNQAgent(
         state_dim=env.state_dim,
-        num_vehicles=args.num_vehicles,
+        num_vehicle=args.num_vehicles,
         num_rsu=args.num_rsu,
         device=args.gpu,
-        lr=0.0001,
-        writer=writer,
+        lr=0.001,
+        writer=drl_delivery_logger.writer,
+        args=args,
     )
 
-    for timestep in range(args.num_rounds * args.time_step_per_round):
+    for episode in range(5):
+        total_reward = 0
+        delay = []
+        global_total_request = []
+        global_total_hits = []
         env.reset()
-        # Round trigger
-        if timestep % args.time_step_per_round == 0:
 
-            # sampling round's requests
-            env.generate_request(args)
+        for timestep in tqdm(range(args.num_rounds * args.time_step_per_round)):
+            round = timestep // args.num_rounds
+            step = timestep % args.num_rounds
 
-            # Perform FL
-            if args.content_handler == "fl":
-                fl_cache(args, env, timestep, env.coverage)
-            elif args.content_handler == "random":
-                random_cache(args, env, timestep, env.coverage)
+            begin_round = step == 0
 
-        # get action matrix
-        env.update_state(timestep, args)
+            if begin_round:
+                if args.content_handler == "fl":
+                    fl_cache(args, env)
+                else:
+                    random_cache(env)
 
-        if args.va_decision == "random":
-            actions = random_delivery(args)
-            delays, total_request, total_hits = compute_delay(
-                args, env, timestep, env.requests, actions
-            )
-        elif args.va_decision == "greedy":
-            actions = greedy_delivery(args, env, timestep, env.requests)
-            delays, total_request, total_hits = compute_delay(
-                args, env, timestep, env.requests, actions
-            )
-        elif args.va_decision == "drl":
+            # get state
             state = env.state
 
-            total_request = sum(
-                1 for ts in env.requests if ts == timestep % args.time_step_per_round
+            # get actions
+            actions = drl_agent.select_action(
+                state,
             )
 
-            # train DRL model
-            for step in tqdm(range(args.num_steps), desc="Training DRL"):
-                actions = agent.select_action(state, args, timestep, env)
+            # compute reward
+            delays, total_request, total_hits = compute_delay(args, env, actions)
 
-                delays, total_request, total_hits = compute_delay(
-                    args, env, timestep, env.requests, actions
-                )
+            env.step()
 
-                hit_rate = total_hits / total_request if total_request != 0 else 0
+            next_state = env.state
 
-                next_state = env.state
-                done = True if step == args.num_steps else False
-                agent.replay_buffer.push(
-                    state,
-                    actions,
-                    (-(sum(delays) * 1e3 / total_request) if total_request != 0 else 0),
-                    next_state,
-                    done,
-                )
-                state = next_state
-                agent.train(batch_size=32)
-                if done:
-                    break
+            reward = np.mean(delays) if len(delays) != 0 else 0
+            reward = 1 / np.exp(reward)
 
-            if timestep % args.time_step_per_round == 0:
-                agent.update_target_network()
-            # inference DRL model
+            done = timestep == args.num_rounds * args.time_step_per_round - 1
 
-        if len(delays) > 0:
-            print(
-                f"Timestep {timestep%args.time_step_per_round + 1}, avg delay: {np.mean(delays)}, hit rate: {total_hits/total_request}"
+            drl_agent.memory.append((state, actions, reward, next_state, done))
+
+            if len(drl_agent.memory) > args.drl_step:
+                drl_agent.train(32)
+
+            total_reward += reward
+
+            drl_agent.writer.add_scalar(
+                "Reward per step",
+                reward,
+                drl_agent.steps,
             )
-            writer.add_scalar("avg_delay", np.mean(delays), timestep)
-            writer.add_scalar("hit_rate", total_hits / total_request, timestep)
-            global_delays.extend(delays)
-            global_request.append(total_request)
-            global_hits.append(total_hits)
 
-    with open(os.path.join(save_dir, "args.json"), "w") as f:
-        json.dump(vars(args), f)
+            delay.extend([d for d in delays if d < 10])
+            global_total_hits.append(total_hits)
+            global_total_request.append(total_request)
 
-    # save results
-    with open(os.path.join(save_dir, "results.pkl"), "wb") as f:
-        pkl.dump(
-            {
-                "global_delays": global_delays,
-                "global_request": global_request,
-                "global_hits": global_hits,
-                "avg_delay": np.mean(global_delays),
-                "avg_hit_rate": np.mean(global_hits) / np.mean(global_request),
-            },
-            f,
+            if begin_round:
+                drl_agent.update_target()
+
+        drl_agent.writer.add_scalar(
+            "Avg Total Reward",
+            total_reward / (args.num_rounds * args.time_step_per_round),
+            episode,
         )
-    print(f"Average delay: {np.mean(global_delays)}")
-    print(f"Average hit rate: {np.mean(global_hits)/np.mean(global_request)}")
+
+        # hit_rate = np.sum(global_total_hits) / np.sum(global_total_request)
+        # avg_delay = np.mean(delay) if len(delay) != 0 else 0
+
+        # drl_agent.writer.add_scalar(
+        #     "Hit Rate",
+        #     hit_rate,
+        #     episode,
+        # )
+
+        # drl_agent.writer.add_scalar(
+        #     "Avg Delay",
+        #     avg_delay,
+        #     episode,
+        # )
 
 
-def compute_delay(args, env, timestep, requests, actions):
+def compute_delay(args, env, actions):
     delays = []
-
-    total_request = 0
     total_hits = 0
 
-    # Compute delay
-    for vehicle_idx, ts in enumerate(requests):
-        if ts == timestep % args.time_step_per_round:
-            total_request += 1
-            action = int(actions[vehicle_idx])
-            local_rsu = env.reverse_coverage[vehicle_idx]
-            requested_content = env.vehicles[vehicle_idx].request
-            wireless_rate = env.communication.get_data_rate(vehicle_idx, local_rsu)
+    total_request = len(env.request)
+    for vehicle_idx in env.request:
+        action = int(actions[vehicle_idx])
+        local_rsu = env.reverse_coverage[vehicle_idx]
+        requested_content = env.vehicles[vehicle_idx].request
+        wireless_rate = env.communication.get_data_rate(vehicle_idx, local_rsu)
 
-            wireless_delay = args.content_size / wireless_rate
-            fiber_delay = args.content_size / args.fiber_rate
-            cloud_delay = args.content_size / args.cloud_rate
+        wireless_delay = args.content_size / wireless_rate
+        fiber_delay = args.content_size / args.fiber_rate
+        cloud_delay = args.content_size / args.cloud_rate
 
-            if action != 0:
-                if requested_content in env.rsus[action - 1].cache:
-                    total_hits += 1
-                    if action - 1 == local_rsu:
-                        delays.append(wireless_delay)
-                    else:
-                        delays.append(fiber_delay + wireless_delay)
+        if action == 0:
+            delays.append(float("inf"))
+        elif action == args.num_rsu + 1:
+            delays.append(cloud_delay + wireless_delay)
+        else:
+            if requested_content in env.rsus[action - 1].cache:
+                if action - 1 == local_rsu:
+                    total_delay = wireless_delay
                 else:
-                    delays.append(cloud_delay + wireless_delay)
+                    total_delay = fiber_delay + wireless_delay
 
+                if total_delay < args.deadline:
+                    total_hits += 1
+
+                delays.append(total_delay)
             else:
                 delays.append(cloud_delay + wireless_delay)
+
     return delays, total_request, total_hits
 
 

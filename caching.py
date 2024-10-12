@@ -9,15 +9,14 @@ def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
-def random_cache(args, env, timestep, coverage):
+def random_cache(env):
     for rsu in env.rsus:
         rsu.cache = np.random.choice(
             env.library.max_movie_id + 1, rsu.capacity, replace=False
         )
 
 
-def fl_cache(args, env, timestep, coverage):
-    print(f"Round {timestep // args.time_step_per_round + 1}, performing FL")
+def fl_cache(args, env):
 
     # Select vehicles to join the Federated Learning
     selected_vehicles = []
@@ -30,11 +29,11 @@ def fl_cache(args, env, timestep, coverage):
 
     for rsu_idx, rsu in enumerate(env.rsus):
         if rsu.cluster is None:
-            for vehicle_idx in coverage[rsu_idx]:
+            for vehicle_idx in env.coverage[rsu_idx]:
                 env.vehicles[vehicle_idx].set_weights(rsu.model.state_dict())
         else:
             print()
-            for vehicle_idx in coverage[rsu_idx]:
+            for vehicle_idx in env.coverage[rsu_idx]:
                 similar = 0
                 vehicle_flatten_weights = (
                     env.vehicles[vehicle_idx].get_flatten_weights().cpu().numpy()
@@ -55,21 +54,19 @@ def fl_cache(args, env, timestep, coverage):
         pbar = tqdm(total=len(selected_vehicles), desc="Local update")
 
         def local_update(vehicle):
-            vehicle.local_update(round=timestep // args.time_step_per_round)
+            vehicle.local_update()
             pbar.update()
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             executor.map(local_update, [env.vehicles[i] for i in selected_vehicles])
     else:
         for vehicle in tqdm(selected_vehicles, desc="Local update"):
-            env.vehicles[vehicle].local_update(
-                round=timestep // args.time_step_per_round
-            )
+            env.vehicles[vehicle].local_update()
 
     # Clustering
     for i in range(args.num_rsu):
         # get the selected vehicles in the coverage area
-        vehicle_ids = [j for j in coverage[i] if j in selected_vehicles]
+        vehicle_ids = [j for j in env.coverage[i] if j in selected_vehicles]
 
         # get weights of the selected vehicles
         flattened_weights = [
@@ -77,7 +74,7 @@ def fl_cache(args, env, timestep, coverage):
         ]
 
         # do clustering
-        if len(coverage[i]) >= args.num_clusters:
+        if len(env.coverage[i]) >= args.num_clusters:
             clusters, _, centroids = clustering(args.num_clusters, flattened_weights)
         else:
             clusters, _, centroids = clustering(1, flattened_weights)
@@ -109,9 +106,9 @@ def fl_cache(args, env, timestep, coverage):
 
     # Cache replacement
     for r in range(args.num_rsu):
-        predictions = [env.vehicles[i].predict() for i in coverage[r]]
+        predictions = [env.vehicles[i].predict() for i in env.coverage[r]]
         if len(predictions) == 0:
             continue
         popularity = np.mean(predictions, axis=0)
-        cache = np.argsort(popularity)[::-1][: env.rsus[r].capacity]
-        env.rsus[r].cache = cache
+        np.argsort(popularity)[::-1][: env.rsus[r].capacity]
+        env.rsus[r].cache = np.argsort(popularity)[::-1][: env.rsus[r].capacity]

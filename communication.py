@@ -9,7 +9,7 @@ class Communication:
         self.distance_matrix = cal_distance_matrix(vehicle, rsu)
         self.num_vehicle, self.num_rsu = self.distance_matrix.shape
 
-        self.B_sub = 540e3  # in Hz
+        self.B_sub = 2e6  # in Hz
         self.shadow_std = 8  # in dB
         self.transmission_power_dBm = 30  # in dBm
         self.noise_power_dBm = -114  # in dBm

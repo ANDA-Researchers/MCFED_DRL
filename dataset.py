@@ -29,15 +29,14 @@ class Library:
         self.available_users = []
 
     def genrate_clients(self):
-        top_user = self.ratings["user_id"].value_counts().index[:200]
+        top_user = self.ratings["user_id"].value_counts().index[:100]
         choosen = np.random.choice(top_user, replace=False)
         while choosen in self.available_users:
             choosen = np.random.choice(top_user, replace=False)
         self.available_users.append(choosen)
         history, ratings = self.get_inputs(choosen)
 
-        end_train = int(len(history) * 0.8)
-        end_test = int(len(history) * 0.99)
+        end_train = int(len(history) * 0.98)
 
         cosine_inputs = [self.cosine_semantic_matrix[his - 1] for his in history]
         semantic_inputs = [self.semantic_vecs[his - 1] for his in history]
@@ -48,20 +47,14 @@ class Library:
         train_labels = labels[:end_train]
         train_ids = history[:end_train]
 
-        test_cosine = cosine_inputs[end_train:end_test]
-        test_semantic = semantic_inputs[end_train:end_test]
-        test_labels = labels[end_train:end_test]
-        test_ids = history[end_train:end_test]
-
-        request_cosine = cosine_inputs[end_test:]
-        request_semantic = semantic_inputs[end_test:]
-        request_labels = labels[end_test:]
-        request_ids = history[end_test:]
+        test_cosine = cosine_inputs[end_train:]
+        test_semantic = semantic_inputs[end_train:]
+        test_labels = labels[end_train:]
+        test_ids = history[end_train:]
 
         return {
             "train": (train_cosine, train_semantic, train_labels, train_ids),
             "test": (test_cosine, test_semantic, test_labels, test_ids),
-            "request": (request_cosine, request_semantic, request_labels, request_ids),
             "movies": torch.zeros((self.max_movie_id + 1)),
             "uid": choosen,
             "user_info": torch.tensor(

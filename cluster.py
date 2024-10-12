@@ -6,7 +6,7 @@ from sympy import centroid
 
 def clustering(clients_num, flattened_weights):
     if len(flattened_weights) == 0:
-        return [], 0
+        return [], 0, []
     else:
         flattened_weights = [
             weight.cpu().detach().numpy() for weight in flattened_weights

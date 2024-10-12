@@ -28,38 +28,36 @@ class Environment:
         max_velocity: float,
         std_velocity: float,
         road_length: float,
-        road_width: float,
         rsu_coverage: float,
         rsu_capacity: int,
         num_rsu: int,
         num_vehicles: int,
+        args,
         time_step: int = 1,
-        rsu_highway_distance: float = 1,
         gpu: int = 0,
         embedding_size: int = 50,
-        writer=None,
     ) -> None:
-        self._validate_parameters(
-            min_velocity, max_velocity, num_rsu, rsu_coverage, road_length
-        )
 
         # Simulation parameters
         self.road_length = road_length
-        self.road_width = road_width
         self.time_step = time_step
-        self.current_time = 0
         self.library = Library(num_vehicles)
-        self.communication = None
         self.gpu = gpu
         self.embedding_size = embedding_size
-        self.requests = None
-        self.writer = writer
+        self.args = args
 
         # RSU
         self.rsu_coverage = rsu_coverage
         self.rsu_capacity = rsu_capacity
         self.num_rsu = num_rsu
-        self.rsu_highway_distance = rsu_highway_distance
+        self.rsus = [
+            RSU(
+                (i + 1) * self.rsu_coverage - self.rsu_coverage / 2,
+                self.rsu_capacity,
+                self.init_model(),
+            )
+            for i in range(self.num_rsu)
+        ]
 
         # Vehicle parameters
         self.min_velocity = min_velocity
@@ -67,33 +65,28 @@ class Environment:
         self.std_velocity = std_velocity
         self.num_vehicles = num_vehicles
 
-        self.rsus = []
-        self.vehicles = []
-
+        # state dim
         self.state_dim = (
             self.num_vehicles * self.num_rsu
             + self.num_vehicles * (self.library.max_movie_id + 1)
             + self.num_vehicles * self.num_rsu
-            + (self.num_rsu + 1) * (self.library.max_movie_id + 1)
+            + (self.num_rsu + 2) * (self.library.max_movie_id + 1)
         )
-        self.action_dim = self.num_vehicles * (self.num_rsu + 1)
 
-    def generate_request(self, args):
-        self.requests = [
-            int(reg)
-            for reg in np.random.uniform(0, args.time_step_per_round, args.num_vehicles)
-        ]
+    def reset(self):
+        self.library.available_users = []
+        self._initialize_vehicles()
+        self._init_channel()
+        self._update_coverage()
+        self._init_request()
+        self._update_state()
 
-    def _validate_parameters(
-        self,
-        min_velocity: float,
-        max_velocity: float,
-        num_rsu: int,
-        rsu_coverage: float,
-        road_length: float,
-    ) -> None:
-        assert min_velocity <= max_velocity and min_velocity >= 0, "Invalid velocity"
-        assert num_rsu * rsu_coverage <= road_length, "Invalid RSU configuration"
+    def step(self):
+        self._update_vehicles()
+        self._init_channel()
+        self._update_coverage()
+        self._update_requests()
+        self._update_state()
 
     def init_model(self):
         return DNN(self.embedding_size, 1)
@@ -115,7 +108,6 @@ class Environment:
             data,
             self.init_model(),
             self.gpu,
-            writer=self.writer,
         )
         self.vehicles.append(vehicle)
         return vehicle
@@ -124,21 +116,18 @@ class Environment:
         positions = np.random.uniform(0, length, n)
         return positions
 
-    def _initialize_rsus(self) -> list:
-        self.rsus = [
-            RSU(
-                (i + 1) * self.rsu_coverage - self.rsu_coverage / 2,
-                self.rsu_capacity,
-                self.init_model(),
-            )
-            for i in range(self.num_rsu)
-        ]
-
     def _initialize_vehicles(self) -> list:
+        self.vehicles = []
         positions = self.poisson_process_on_road(self.num_vehicles, self.road_length)
 
         for position in positions:
             self.add_vehicle(position, self.library.genrate_clients())
+
+    def _update_vehicles(self):
+        self._update_vehicle_positions()
+        self._update_vehicle_requests()
+        self._update_vehicle_velocities()
+        self._remove_and_add_vehicles()
 
     def _update_vehicle_positions(self) -> None:
         for vehicle in self.vehicles:
@@ -152,6 +141,38 @@ class Environment:
                 self.library.available_users.remove(vehicle.uid)
                 self.add_vehicle(0, self.library.genrate_clients())
 
+    def _init_channel(self):
+        self.communication = Communication(self.vehicles, self.rsus)
+
+    def _init_request(self):
+        requests = [
+            int(reg)
+            for reg in np.random.uniform(
+                0, self.args.time_step_per_round, self.args.num_vehicles
+            )
+        ]
+
+        self.requests = [
+            [reg for reg in requests if reg == i]
+            for i in range(self.args.time_step_per_round)
+        ]
+        self.request = self.requests.pop(0)
+
+    def _update_requests(self):
+        if len(self.requests) == 0:
+            self._init_request()
+        else:
+            self.request = self.requests.pop(0)
+
+    def _update_coverage(self):
+        self.coverage = {k: [] for k in range(self.num_rsu)}
+        for i in range(self.num_vehicles):
+            for j in range(self.num_rsu):
+                if self.communication.distance_matrix[i][j] < self.rsu_coverage:
+                    self.coverage[j].append(i)
+
+        self.reverse_coverage = {v: k for k, l in self.coverage.items() for v in l}
+
     def _update_vehicle_velocities(self) -> None:
         mean = sum([vehicle.velocity for vehicle in self.vehicles]) / len(self.vehicles)
         for vehicle in self.vehicles:
@@ -161,60 +182,39 @@ class Environment:
         for vehicle in self.vehicles:
             vehicle.update_request()
 
-    def reset(self) -> None:
-        if self.rsus == [] or self.vehicles == []:
-            self._initialize_rsus()
-            self._initialize_vehicles()
-        else:
-            self._update_vehicle_positions()
-            self._remove_and_add_vehicles()
-            self._update_vehicle_velocities()
-            self.current_time += self.time_step
+    def _update_state(self):
+        # num_vehicles * num_rsu
+        positions_state = self.communication.distance_matrix.flatten()
 
-        # Get channel status
-        self.communication = Communication(self.vehicles, self.rsus)
+        # num_vehicles * num_movies
+        request_matrix = np.zeros((self.num_vehicles, self.library.max_movie_id + 1))
+        for idx in self.request:
+            request_matrix[idx][self.vehicles[idx].request] = 1
 
-        # Get coverage status
-        self.coverage = {k: [] for k in range(self.num_rsu)}
-        for i in range(self.num_vehicles):
-            for j in range(self.num_rsu):
-                if self.communication.distance_matrix[i][j] < self.rsu_coverage:
-                    self.coverage[j].append(i)
-
-        self.reverse_coverage = {v: k for k, l in self.coverage.items() for v in l}
-
-    def update_state(self, timestep, args):
-        positions_state = (
-            self.communication.distance_matrix.flatten()
-        )  # num_vehicles * num_rsu
-        request_matrix = np.zeros(
-            (self.num_vehicles, self.library.max_movie_id + 1)
-        )  # num_vehicles * num_movies
-        for idx, ts in enumerate(self.requests):
-            if ts == timestep % args.time_step_per_round:
-                request_matrix[idx][self.vehicles[idx].request] = 1
-        shadowing_state = (
+        # num_vehicles * num_rsu
+        channel_status = (
             self.communication.current_shadowing.flatten()
-        )  # num_vehicles * num_rsu
-        fast_fading_state = (
-            self.communication.current_fast_fading.flatten()
-        )  # num_vehicles * num_rsu
+            + self.communication.current_fast_fading.flatten()
+        )
 
-        channel_status = shadowing_state + fast_fading_state
-        cache_matrix = np.zeros((self.num_rsu + 1, self.library.max_movie_id + 1))
+        # self.num_rsu + 2, self.library.max_movie_id + 1
+        cache_matrix = np.zeros((self.num_rsu + 2, self.library.max_movie_id + 1))
+
         for i in range(self.num_rsu + 1):
             for j in range(self.library.max_movie_id + 1):
-                if i == 0:
+                if i == self.num_rsu + 2:
                     cache_matrix[i][j] = 1
                 else:
-
                     if j in self.rsus[i - 1].cache:
                         cache_matrix[i][j] = 1
+
         self.state = np.concatenate(
             [
-                positions_state,  # num_vehicles * num_rsu
-                request_matrix.flatten(),  # num_vehicles * num_movies
-                channel_status,  # num_vehicles * num_rsu
-                cache_matrix.flatten(),  # num_rsu * num_movies
+                positions_state,
+                request_matrix.flatten(),
+                channel_status,
+                cache_matrix.flatten(),
             ]
         )
+
+        assert self.state.shape == self.state_dim

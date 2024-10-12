@@ -2,10 +2,21 @@ import numpy as np
 
 
 def random_delivery(args):
-    actions = np.random.random(args.num_vehicles * (args.num_rsu + 1)).reshape(
-        args.num_vehicles, (args.num_rsu + 1)
+    actions = np.random.random(args.num_vehicles * (args.num_rsu + 2)).reshape(
+        args.num_vehicles, (args.num_rsu + 2)
     )
     actions = np.argmax(actions, axis=1)
+
+    # restrict the number of connections
+    connected_vehicle_indices = np.where(actions != 0)[0]
+    if len(connected_vehicle_indices) > args.max_connections:
+        drop_indices = np.random.choice(
+            connected_vehicle_indices,
+            len(connected_vehicle_indices) - args.max_connections,
+            replace=False,
+        )
+        actions[drop_indices] = 0
+
     return actions
 
 
@@ -24,8 +35,20 @@ def greedy_delivery(args, env, timestep, requests):
             if requested_content in local_rsu.cache:
                 actions[vehicle_idx] = local_rsu_idx + 1
             else:
+                actions[vehicle_idx] = args.num_rsu + 1
                 for rsu, idx in neighbor_rsus:
                     if requested_content in rsu.cache:
                         actions[vehicle_idx] = idx + 1
                         break
+
+    # restrict the number of connections
+    connected_vehicle_indices = np.where(actions != 0)[0]
+    if len(connected_vehicle_indices) > args.max_connections:
+        drop_indices = np.random.choice(
+            connected_vehicle_indices,
+            len(connected_vehicle_indices) - args.max_connections,
+            replace=False,
+        )
+        actions[drop_indices] = 0
+
     return actions
