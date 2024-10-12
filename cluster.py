@@ -1,7 +1,5 @@
-from networkx import center
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from sympy import centroid
 
 
 def clustering(clients_num, flattened_weights):

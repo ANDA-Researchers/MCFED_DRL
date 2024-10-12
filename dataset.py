@@ -69,6 +69,9 @@ class Library:
 
         return torch.tensor(movie_ids), torch.tensor(ratings)
 
+    def reset(self):
+        self.available_users = []
+
 
 def load_movies():
     movies = pd.read_csv(

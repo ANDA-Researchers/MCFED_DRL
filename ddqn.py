@@ -5,7 +5,6 @@ import torch.nn.functional as F
 import numpy as np
 import random
 from collections import deque
-from torch.utils.tensorboard import SummaryWriter
 
 
 class DDNQ(nn.Module):
@@ -134,12 +133,14 @@ class DDNQAgent:
 
         loss = F.mse_loss(q_values, target_q_values)
 
-        self.writer.add_scalar("Loss/train", loss.item(), self.steps)
+        self.writer.add_scalar("Loss", loss.item(), self.steps)
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
         self.steps += 1
+
+        self.update_epsilon()
 
         return loss.item()

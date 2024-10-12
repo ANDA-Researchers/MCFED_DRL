@@ -1,12 +1,8 @@
 import numpy as np
 from cluster import clustering
-from utils import average_weights
+from utils import average_weights, cosine_similarity
 import concurrent.futures
 from tqdm import tqdm
-
-
-def cosine_similarity(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
 def random_cache(env):
@@ -16,23 +12,22 @@ def random_cache(env):
         )
 
 
-def fl_cache(args, env):
-
+def mcfed(env):
     # Select vehicles to join the Federated Learning
     selected_vehicles = []
     for idx, vehicle in enumerate(env.vehicles):
         next_location = vehicle.velocity + vehicle.position
         local_rsu = env.rsus[env.reverse_coverage[idx]]
 
-        if abs(next_location - local_rsu.position) < args.rsu_coverage:
+        if abs(next_location - local_rsu.position) < env.rsu_coverage:
             selected_vehicles.append(idx)
 
+    # Download Global Model
     for rsu_idx, rsu in enumerate(env.rsus):
         if rsu.cluster is None:
             for vehicle_idx in env.coverage[rsu_idx]:
                 env.vehicles[vehicle_idx].set_weights(rsu.model.state_dict())
         else:
-            print()
             for vehicle_idx in env.coverage[rsu_idx]:
                 similar = 0
                 vehicle_flatten_weights = (
@@ -49,8 +44,8 @@ def fl_cache(args, env):
                 if new_weights is not None:
                     env.vehicles[vehicle_idx].set_weights(new_weights)
 
-    # Local update:
-    if args.parallel_update:
+    # Local update
+    if env.args.parallel_update:
         pbar = tqdm(total=len(selected_vehicles), desc="Local update")
 
         def local_update(vehicle):
@@ -63,8 +58,8 @@ def fl_cache(args, env):
         for vehicle in tqdm(selected_vehicles, desc="Local update"):
             env.vehicles[vehicle].local_update()
 
-    # Clustering
-    for i in range(args.num_rsu):
+    # Perform clustering
+    for i in range(env.num_rsu):
         # get the selected vehicles in the coverage area
         vehicle_ids = [j for j in env.coverage[i] if j in selected_vehicles]
 
@@ -73,9 +68,11 @@ def fl_cache(args, env):
             env.vehicles[idx].get_flatten_weights() for idx in vehicle_ids
         ]
 
-        # do clustering
-        if len(env.coverage[i]) >= args.num_clusters:
-            clusters, _, centroids = clustering(args.num_clusters, flattened_weights)
+        # perform clustering
+        if len(env.coverage[i]) >= env.args.num_clusters:
+            clusters, _, centroids = clustering(
+                env.args.num_clusters, flattened_weights
+            )
         else:
             clusters, _, centroids = clustering(1, flattened_weights)
 
@@ -105,7 +102,7 @@ def fl_cache(args, env):
         env.rsus[i].cluster = clusters_save_in_rsu
 
     # Cache replacement
-    for r in range(args.num_rsu):
+    for r in range(env.num_rsu):
         predictions = [env.vehicles[i].predict() for i in env.coverage[r]]
         if len(predictions) == 0:
             continue

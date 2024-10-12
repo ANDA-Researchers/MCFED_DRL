@@ -1,12 +1,12 @@
 import numpy as np
 
-from utils import cal_distance, cal_distance_matrix
+from utils import calculate_distance_matrix
 
 
 class Communication:
     def __init__(self, vehicle, rsu):
 
-        self.distance_matrix = cal_distance_matrix(vehicle, rsu)
+        self.distance_matrix = calculate_distance_matrix(vehicle, rsu)
         self.num_vehicle, self.num_rsu = self.distance_matrix.shape
 
         self.B_sub = 2e6  # in Hz
@@ -58,3 +58,9 @@ class Communication:
         data_rate = self.B_sub * np.log2(1 + np.divide(channel_gain, noise_power_watt))
 
         return data_rate
+
+    def reset(self, vehicle, rsu):
+        self.distance_matrix = calculate_distance_matrix(vehicle, rsu)
+
+        self.current_shadowing = self.get_shadowing()
+        self.current_fast_fading = self.get_fast_fading()

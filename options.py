@@ -1,0 +1,26 @@
+import argparse
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="MCFED Simulation")
+    parser.add_argument("--min_velocity", type=int, default=5)
+    parser.add_argument("--max_velocity", type=int, default=10)
+    parser.add_argument("--std_velocity", type=float, default=2.5)
+    parser.add_argument("--rsu_coverage", type=int, default=500)
+    parser.add_argument("--rsu_capacity", type=int, default=100)
+    parser.add_argument("--num_rsu", type=int, default=4)
+    parser.add_argument("--num_vehicles", type=int, default=40)
+    parser.add_argument("--time_step", type=int, default=1)
+    parser.add_argument("--num_clusters", type=int, default=2)
+    parser.add_argument("--time_step_per_round", type=int, default=10)
+    parser.add_argument("--episode", type=int, default=30)
+    parser.add_argument("--num_rounds", type=int, default=30)
+    parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--parallel_update", type=bool, default=False)
+    parser.add_argument("--content_size", type=int, default=4e6)
+    parser.add_argument("--cloud_rate", type=float, default=6e6)
+    parser.add_argument("--fiber_rate", type=float, default=15e6)
+    parser.add_argument("--deadline", type=int, default=1)
+    parser.add_argument("--max_connections", type=int, default=10)
+    parser.add_argument("--caching_strategy", type=str, default="fl")
+    return parser.parse_args()

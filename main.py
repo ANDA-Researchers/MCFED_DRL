@@ -1,14 +1,13 @@
-import argparse
 import numpy as np
 from tqdm import tqdm
-from caching import fl_cache, random_cache
-from drl import DDNQAgent
+from cache import fl_cache, random_cache
+from ddqn import DDNQAgent
 from environment import Environment
-from delivery import random_delivery, greedy_delivery
 import os
 import datetime
-import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
+
+from options import parse_args
 
 
 class OutputHandler:
@@ -56,32 +55,6 @@ class OutputHandler:
         )
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="MCFED DRL Simulation")
-    parser.add_argument("--min_velocity", type=int, default=5)
-    parser.add_argument("--max_velocity", type=int, default=10)
-    parser.add_argument("--std_velocity", type=float, default=2.5)
-    parser.add_argument("--road_length", type=int, default=2000)
-    parser.add_argument("--rsu_coverage", type=int, default=500)
-    parser.add_argument("--rsu_capacity", type=int, default=100)
-    parser.add_argument("--num_rsu", type=int, default=4)
-    parser.add_argument("--num_vehicles", type=int, default=40)
-    parser.add_argument("--time_step", type=int, default=1)
-    parser.add_argument("--num_clusters", type=int, default=2)
-    parser.add_argument("--time_step_per_round", type=int, default=10)
-    parser.add_argument("--num_rounds", type=int, default=30)
-    parser.add_argument("--gpu", type=int, default=0)
-    parser.add_argument("--parallel_update", type=bool, default=False)
-    parser.add_argument("--content_size", type=int, default=4e6)
-    parser.add_argument("--cloud_rate", type=float, default=6e6)
-    parser.add_argument("--fiber_rate", type=float, default=15e6)
-    parser.add_argument("--deadline", type=int, default=1)
-    parser.add_argument("--max_connections", type=int, default=10)
-    parser.add_argument("--content_handler", type=str, default="fl")
-    parser.add_argument("--drl_step", type=int, default=10)
-    return parser.parse_args()
-
-
 args = parse_args()
 
 
@@ -93,7 +66,6 @@ def main():
         min_velocity=args.min_velocity,
         max_velocity=args.max_velocity,
         std_velocity=args.std_velocity,
-        road_length=args.road_length,
         rsu_coverage=args.rsu_coverage,
         rsu_capacity=args.rsu_capacity,
         num_rsu=args.num_rsu,
@@ -113,15 +85,14 @@ def main():
         args=args,
     )
 
-    for episode in range(5):
+    # Train the agent
+    for episode in range(args.episode):
+
         total_reward = 0
-        delay = []
-        global_total_request = []
-        global_total_hits = []
         env.reset()
 
         for timestep in tqdm(range(args.num_rounds * args.time_step_per_round)):
-            round = timestep // args.num_rounds
+            current_round = timestep // args.num_rounds
             step = timestep % args.num_rounds
 
             begin_round = step == 0
@@ -165,10 +136,6 @@ def main():
                 drl_agent.steps,
             )
 
-            delay.extend([d for d in delays if d < 10])
-            global_total_hits.append(total_hits)
-            global_total_request.append(total_request)
-
             if begin_round:
                 drl_agent.update_target()
 
@@ -177,21 +144,6 @@ def main():
             total_reward / (args.num_rounds * args.time_step_per_round),
             episode,
         )
-
-        # hit_rate = np.sum(global_total_hits) / np.sum(global_total_request)
-        # avg_delay = np.mean(delay) if len(delay) != 0 else 0
-
-        # drl_agent.writer.add_scalar(
-        #     "Hit Rate",
-        #     hit_rate,
-        #     episode,
-        # )
-
-        # drl_agent.writer.add_scalar(
-        #     "Avg Delay",
-        #     avg_delay,
-        #     episode,
-        # )
 
 
 def compute_delay(args, env, actions):
