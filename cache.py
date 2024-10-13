@@ -109,3 +109,22 @@ def mcfed(env):
         popularity = np.mean(predictions, axis=0)
         np.argsort(popularity)[::-1][: env.rsus[r].capacity]
         env.rsus[r].cache = np.argsort(popularity)[::-1][: env.rsus[r].capacity]
+
+
+def fedavg(env):
+    # in this case, rsu with store 1 model, and the aggregation is done for all vehicles
+
+    # Select vehicles to join the Federated Learning
+    selected_vehicles = []
+
+    for idx, vehicle in enumerate(env.vehicles):
+        next_location = vehicle.velocity + vehicle.position
+        local_rsu = env.rsus[env.reverse_coverage[idx]]
+
+        if abs(next_location - local_rsu.position) < env.rsu_coverage:
+            selected_vehicles.append(idx)
+
+    # Download Global Model
+    for rsu_idx, rsu in enumerate(env.rsus):
+        for vehicle_idx in env.coverage[rsu_idx]:
+            env.vehicles[vehicle_idx].set_weights(rsu.model.state_dict())
