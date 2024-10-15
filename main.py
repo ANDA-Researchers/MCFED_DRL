@@ -1,6 +1,6 @@
 import numpy as np
 from tqdm import tqdm
-from cache import fl_cache, random_cache
+from cache import random_cache, mcfed
 from ddqn import DDNQAgent
 from environment import Environment
 import os
@@ -20,7 +20,7 @@ class OutputHandler:
         self.name = name
         self.save_dir = os.path.join(
             "logs",
-            f"{args.content_handler}_{self.name}_{args.rsu_capacity}_{args.num_vehicles}_{self.created}",
+            f"{self.name}_{args.rsu_capacity}_{args.num_vehicles}_{self.created}",
         )
 
         os.makedirs(self.save_dir, exist_ok=True)
@@ -99,7 +99,7 @@ def main():
 
             if begin_round:
                 if args.content_handler == "fl":
-                    fl_cache(args, env)
+                    mcfed(env)
                 else:
                     random_cache(env)
 
