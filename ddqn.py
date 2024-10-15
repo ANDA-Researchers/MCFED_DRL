@@ -23,7 +23,12 @@ class DDNQ(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
 
-        return x.view(-1, self.num_vehicle, self.num_rsu + 2)
+        # reshape to (batch_size, num_vehicle, num_rsu + 2)
+        x = x.view(-1, self.num_vehicle, self.num_rsu + 2)
+
+        # apply softmax to get probabilities best action for each vehicle
+        x = F.softmax(x, dim=2)
+        return x
 
 
 class DDNQAgent:
@@ -77,7 +82,10 @@ class DDNQAgent:
             q_values = self.policy_net(state_tensor).squeeze(0)
             actions = q_values.argmax(dim=1).cpu().numpy()
 
-        return actions
+        # update epsilon
+        self.update_epsilon()
+
+        return self.filter_actions(actions, q_values.cpu().numpy())
 
     def filter_actions(self, actions, q_values=None):
         max_connections = self.args.max_connections
@@ -140,7 +148,5 @@ class DDNQAgent:
         self.optimizer.step()
 
         self.steps += 1
-
-        self.update_epsilon()
 
         return loss.item()
