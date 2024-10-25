@@ -20,7 +20,7 @@ class OutputHandler:
         self.name = name
         self.save_dir = os.path.join(
             "logs",
-            f"{self.name}_{args.rsu_capacity}_{args.num_vehicles}_{self.created}",
+            f"{self.name}_{args.rsu_capacity}_{args.num_vehicle}_{self.created}",
         )
 
         os.makedirs(self.save_dir, exist_ok=True)
@@ -63,21 +63,12 @@ def main():
     drl_delivery_logger = OutputHandler("ddqn", args)
 
     env = Environment(
-        min_velocity=args.min_velocity,
-        max_velocity=args.max_velocity,
-        std_velocity=args.std_velocity,
-        rsu_coverage=args.rsu_coverage,
-        rsu_capacity=args.rsu_capacity,
-        num_rsu=args.num_rsu,
-        num_vehicles=args.num_vehicles,
-        time_step=args.time_step,
         args=args,
-        gpu=args.gpu,
     )
 
     drl_agent = DDNQAgent(
         state_dim=env.state_dim,
-        num_vehicle=args.num_vehicles,
+        num_vehicle=args.num_vehicle,
         num_rsu=args.num_rsu,
         device=args.gpu,
         lr=0.001,
@@ -98,7 +89,8 @@ def main():
             begin_round = step == 0
 
             if begin_round:
-                random_cache(env)  # random cache placement for train the delivery agent
+                # random_cache(env)  # random cache placement for train the delivery agent
+                mcfed(env)
 
             # get state
             state = env.state
@@ -111,12 +103,24 @@ def main():
             # compute reward
             delays, total_request, total_hits = compute_delay(args, env, actions)
 
-            env.step()
+            env.step(actions)
 
             next_state = env.state
 
             reward = np.mean(delays) if len(delays) != 0 else 0
             reward = 1 / np.exp(reward)
+
+            hit_ratio = total_hits / total_request
+
+            drl_delivery_logger.writer.add_scalar(
+                "Hit Ratio per step",
+                hit_ratio,
+                drl_agent.steps,
+            )
+
+            drl_delivery_logger.writer.add_scalar(
+                "Avg delay", np.mean(delays), drl_agent.steps
+            )
 
             done = timestep == args.num_rounds * args.time_step_per_round - 1
 
@@ -135,45 +139,45 @@ def main():
             if begin_round:
                 drl_agent.update_target()
 
-        drl_agent.writer.add_scalar(
-            "Avg Total Reward",
-            total_reward / (args.num_rounds * args.time_step_per_round),
-            episode,
-        )
-
 
 def compute_delay(args, env, actions):
     delays = []
     total_hits = 0
 
-    total_request = len(env.request)
-    for vehicle_idx in env.request:
-        action = int(actions[vehicle_idx])
-        local_rsu = env.reverse_coverage[vehicle_idx]
-        requested_content = env.vehicles[vehicle_idx].request
-        wireless_rate = env.communication.get_data_rate(vehicle_idx, local_rsu)
+    # count request (!=0)
+    total_request = np.count_nonzero(env.request)
 
-        wireless_delay = args.content_size / wireless_rate
+    request_vehicle_ids = np.where(env.request != 0)[0]
+
+    for vehicle_idx in request_vehicle_ids:
+        action = int(actions[vehicle_idx])
+        local_rsu = env.mobility.reverse_coverage[vehicle_idx]
+        requested_content = np.where(env.request[vehicle_idx] != 0)[0][0]
+
+        rsu_rate = env.channel.data_rate[vehicle_idx][1]
+        bs_rate = env.channel.data_rate[vehicle_idx][0]
+
+        rsu_delay = args.content_size / rsu_rate
+        bs_delay = args.content_size / bs_rate
         fiber_delay = args.content_size / args.fiber_rate
-        cloud_delay = args.content_size / args.cloud_rate
+        backhaul_delay = args.content_size / args.cloud_rate
 
         if action == 0:
-            delays.append(float("inf"))
+            delay = bs_delay
+
         elif action == args.num_rsu + 1:
-            delays.append(cloud_delay + wireless_delay)
+            delay = backhaul_delay + rsu_delay
+
+        elif action - 1 == local_rsu and env.rsu[local_rsu].had(requested_content):
+            delay = rsu_delay
+            total_hits += 1
+        elif env.rsu[action - 1].had(requested_content):
+            delay = rsu_delay + fiber_delay
+            total_hits += 1
         else:
-            if requested_content in env.rsus[action - 1].cache:
-                if action - 1 == local_rsu:
-                    total_delay = wireless_delay
-                else:
-                    total_delay = fiber_delay + wireless_delay
+            delay = bs_delay
 
-                if total_delay < args.deadline:
-                    total_hits += 1
-
-                delays.append(total_delay)
-            else:
-                delays.append(cloud_delay + wireless_delay)
+        delays.append(delay)
 
     return delays, total_request, total_hits
 

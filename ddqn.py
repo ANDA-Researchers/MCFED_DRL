@@ -84,35 +84,35 @@ class DDNQAgent:
         # update epsilon
         self.update_epsilon()
 
-        return self.filter_actions(actions, q_values.cpu().numpy())
-
-    def filter_actions(self, actions, q_values=None):
-        max_connections = self.args.max_connections
-        connected_vehicle_indices = np.where(actions != 0)[0]
-
-        if q_values is not None:
-            max_q_values = q_values.max(axis=1)
-
-            # drop overflow connections with the lowest q values
-            if len(connected_vehicle_indices) > max_connections:
-                gap = len(connected_vehicle_indices) - max_connections
-                drop_indices = np.argsort(max_q_values)
-                drop_indices = drop_indices[
-                    np.isin(drop_indices, connected_vehicle_indices)
-                ]
-                drop_indices = drop_indices[:gap]
-                actions[drop_indices] = 0
-        else:
-            if len(connected_vehicle_indices) > max_connections:
-                gap = len(connected_vehicle_indices) - max_connections
-                drop_indices = np.random.choice(
-                    connected_vehicle_indices,
-                    gap,
-                    replace=False,
-                )
-                actions[drop_indices] = 0
-
         return actions
+
+    # def filter_actions(self, actions, q_values=None):
+    #     max_connections = self.args.max_connections
+    #     connected_vehicle_indices = np.where(actions != 0)[0]
+
+    #     if q_values is not None:
+    #         max_q_values = q_values.max(axis=1)
+
+    #         # drop overflow connections with the lowest q values
+    #         if len(connected_vehicle_indices) > max_connections:
+    #             gap = len(connected_vehicle_indices) - max_connections
+    #             drop_indices = np.argsort(max_q_values)
+    #             drop_indices = drop_indices[
+    #                 np.isin(drop_indices, connected_vehicle_indices)
+    #             ]
+    #             drop_indices = drop_indices[:gap]
+    #             actions[drop_indices] = 0
+    #     else:
+    #         if len(connected_vehicle_indices) > max_connections:
+    #             gap = len(connected_vehicle_indices) - max_connections
+    #             drop_indices = np.random.choice(
+    #                 connected_vehicle_indices,
+    #                 gap,
+    #                 replace=False,
+    #             )
+    #             actions[drop_indices] = 0
+
+    #     return actions
 
     def update_target(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())

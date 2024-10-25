@@ -1,45 +1,85 @@
+import torch
+from dataset import (
+    load_movies,
+    load_ratings,
+    compute_cosine_similarities,
+    download_dataset,
+)
+import os
 import numpy as np
-from dataset import load_dataset
 
 
-class ContentLibrary:
-    def __init__(self, path):
-        self.dataset = load_dataset(path)
-        self.ratings = self.dataset["ratings"]
-        self.semantic_vecs = self.dataset["semantic_vec"]
-        self.sparse_vecs = self.dataset["sparse_vec"]
-        self.total_items = list(set(self.ratings["item_id"]))
-        self.total_users = list(set(self.ratings["user_id"]))
-        self.used_user_ids = set()
-        self.max_item_id = max(self.total_items)
-
-    def load_ratings(self, user_id):
-        ratings = self.ratings[self.ratings["user_id"] == user_id].copy()
-        ratings["semantic_vec"] = ratings["item_id"].apply(
-            lambda x: self.semantic_vecs[int(x)]
+class Library:
+    def __init__(self, args) -> None:
+        print("Initializing Library...")
+        if "ml-1m" not in os.listdir("./data"):
+            print("Dataset not found. Downloading from grouplens...")
+            download_dataset()
+        else:
+            print("Dataset found. Loading...")
+        self.ratings, self.user_info = load_ratings()
+        self.sparse_vecs, self.semantic_vecs = load_movies()
+        self.cosine_sparse_matrix, self.cosine_semantic_matrix = (
+            compute_cosine_similarities(self.sparse_vecs, self.semantic_vecs)
         )
-        ratings["sparse_vec"] = ratings["item_id"].apply(
-            lambda x: self.sparse_vecs[int(x)]
-        )
-        ratings = ratings.sort_values(by="timestamp", ascending=False)
+
+        self.max_user_id = self.ratings["user_id"].max()
+        self.max_movie_id = self.ratings["movie_id"].max()
+        self.unavailable_users = []
+
+    def generate_client(self):
+        top_user = self.ratings["user_id"].value_counts()
+        top_user = top_user[top_user > 20].index
+        choosen = np.random.choice(top_user, replace=False)
+        while choosen in self.unavailable_users:
+            choosen = np.random.choice(top_user, replace=False)
+        self.unavailable_users.append(choosen)
+        history, ratings = self.get_inputs(choosen)
+
+        end_train = int(len(history) * 0.98)
+
+        cosine_inputs = [self.cosine_semantic_matrix[his - 1] for his in history]
+        semantic_inputs = [self.semantic_vecs[his - 1] for his in history]
+        labels = [ratings[i] for i in range(len(ratings))]
+
+        train_cosine = cosine_inputs[:end_train]
+        train_semantic = semantic_inputs[:end_train]
+        train_labels = labels[:end_train]
+        train_ids = history[:end_train]
+
+        test_cosine = cosine_inputs[end_train:]
+        test_semantic = semantic_inputs[end_train:]
+        test_labels = labels[end_train:]
+        test_ids = history[end_train:]
+
         return {
-            "contents": ratings["item_id"].values,
-            "ratings": ratings["rating"].values,
-            "semantic_vecs": np.stack(ratings["semantic_vec"].values),
-            "sparse_vecs": np.stack(ratings["sparse_vec"].values),
-            "max": self.max_item_id,
+            "train": (train_cosine, train_semantic, train_labels, train_ids),
+            "test": (test_cosine, test_semantic, test_labels, test_ids),
+            "movies": torch.zeros((self.max_movie_id + 1)),
+            "uid": choosen,
+            "user_info": torch.tensor(
+                self.user_info[self.user_info["user_id"] == choosen].values[0]
+            ),
         }
 
-    def load_user_info(self, user_id):
-        return self.ratings[self.ratings["user_id"] == user_id]
+    def get_inputs(self, user_id, request_ratio=0):
+        user_ratings = self.ratings[self.ratings["user_id"] == user_id]
+        movie_ids = user_ratings["movie_id"].values
+        ratings = user_ratings["rating"].values
 
-    def get_user(self):
-        available_users = list(set(self.total_users) - self.used_user_ids)
-        if not available_users:
-            raise ValueError("No available users left to sample.")
-        user_id = np.random.choice(available_users)
-        self.used_user_ids.add(user_id)
-        return user_id
+        return torch.tensor(movie_ids), torch.tensor(ratings)
 
-    def return_user(self, user_id):
-        self.used_user_ids.discard(user_id)
+    def return_uid(self, uid):
+        self.unavailable_users.remove(uid)
+
+    def reset(self):
+        self.available_users = []
+
+    def step(self):
+        pass
+
+
+if __name__ == "__main__":
+    library = Library(10)
+    library.genrate_clients()
+    library.reset()

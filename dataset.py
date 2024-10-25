@@ -7,68 +7,6 @@ from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 
 
-class Library:
-    def __init__(self, num_clients) -> None:
-        if "ml-1m" not in os.listdir("./data"):
-            print("Dataset not found. Downloading from grouplens...")
-            download_dataset()
-        else:
-            print("Dataset found. Loading...")
-        self.ratings, self.user_info = load_ratings()
-        self.sparse_vecs, self.semantic_vecs = load_movies()
-        self.cosine_sparse_matrix, self.cosine_semantic_matrix = (
-            compute_cosine_similarities(self.sparse_vecs, self.semantic_vecs)
-        )
-
-        self.max_user_id = self.ratings["user_id"].max()
-        self.max_movie_id = self.ratings["movie_id"].max()
-        self.available_users = []
-
-    def genrate_clients(self):
-        top_user = self.ratings["user_id"].value_counts().index[:100]
-        choosen = np.random.choice(top_user, replace=False)
-        while choosen in self.available_users:
-            choosen = np.random.choice(top_user, replace=False)
-        self.available_users.append(choosen)
-        history, ratings = self.get_inputs(choosen)
-
-        end_train = int(len(history) * 0.98)
-
-        cosine_inputs = [self.cosine_semantic_matrix[his - 1] for his in history]
-        semantic_inputs = [self.semantic_vecs[his - 1] for his in history]
-        labels = [ratings[i] for i in range(len(ratings))]
-
-        train_cosine = cosine_inputs[:end_train]
-        train_semantic = semantic_inputs[:end_train]
-        train_labels = labels[:end_train]
-        train_ids = history[:end_train]
-
-        test_cosine = cosine_inputs[end_train:]
-        test_semantic = semantic_inputs[end_train:]
-        test_labels = labels[end_train:]
-        test_ids = history[end_train:]
-
-        return {
-            "train": (train_cosine, train_semantic, train_labels, train_ids),
-            "test": (test_cosine, test_semantic, test_labels, test_ids),
-            "movies": torch.zeros((self.max_movie_id + 1)),
-            "uid": choosen,
-            "user_info": torch.tensor(
-                self.user_info[self.user_info["user_id"] == choosen].values[0]
-            ),
-        }
-
-    def get_inputs(self, user_id, request_ratio=0):
-        user_ratings = self.ratings[self.ratings["user_id"] == user_id]
-        movie_ids = user_ratings["movie_id"].values
-        ratings = user_ratings["rating"].values
-
-        return torch.tensor(movie_ids), torch.tensor(ratings)
-
-    def reset(self):
-        self.available_users = []
-
-
 def load_movies():
     movies = pd.read_csv(
         "./data/ml-1m/movies.dat",
@@ -227,7 +165,3 @@ def process_user_info(user_info):
     user_info = user_info.drop(["zip"], axis=1)
 
     return user_info
-
-
-if __name__ == "__main__":
-    dataset = Library(5)
