@@ -93,15 +93,12 @@ def main():
 
         for timestep in tqdm(range(args.num_rounds * args.time_step_per_round)):
             current_round = timestep // args.num_rounds
-            step = timestep % args.num_rounds
+            step = timestep % args.time_step_per_round
 
             begin_round = step == 0
 
             if begin_round:
-                if args.content_handler == "fl":
-                    mcfed(env)
-                else:
-                    random_cache(env)
+                random_cache(env)  # random cache placement for train the delivery agent
 
             # get state
             state = env.state
@@ -125,8 +122,7 @@ def main():
 
             drl_agent.memory.append((state, actions, reward, next_state, done))
 
-            if len(drl_agent.memory) > args.drl_step:
-                drl_agent.train(32)
+            drl_agent.train(env.args.batch_size)
 
             total_reward += reward
 

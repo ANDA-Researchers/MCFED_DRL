@@ -27,6 +27,7 @@ def calculate_distance_matrix(vehicles, rsus):
             distance_matrix[i][j] = calculate_distance(vehicle.position, rsu.position)
     return distance_matrix
 
+
 def restrict_connections(actions, max_connections):
     connected_vehicle_indices = np.where(actions != 0)[0]
     if len(connected_vehicle_indices) > max_connections:
@@ -36,5 +37,5 @@ def restrict_connections(actions, max_connections):
             replace=False,
         )
         actions[drop_indices] = 0
-        
+
     return actions

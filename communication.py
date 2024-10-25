@@ -61,6 +61,5 @@ class Communication:
 
     def reset(self, vehicle, rsu):
         self.distance_matrix = calculate_distance_matrix(vehicle, rsu)
-
         self.current_shadowing = self.get_shadowing()
         self.current_fast_fading = self.get_fast_fading()

@@ -26,8 +26,6 @@ class DDNQ(nn.Module):
         # reshape to (batch_size, num_vehicle, num_rsu + 2)
         x = x.view(-1, self.num_vehicle, self.num_rsu + 2)
 
-        # apply softmax to get probabilities best action for each vehicle
-        x = F.softmax(x, dim=2)
         return x
 
 
@@ -69,6 +67,7 @@ class DDNQAgent:
         self.args = args
 
     def select_action(self, state):
+        q_values = None
         if np.random.rand() <= self.epsilon:
             actions = np.random.randint(
                 0, self.num_vehicle * (self.num_rsu + 2), self.num_vehicle
@@ -91,21 +90,27 @@ class DDNQAgent:
         max_connections = self.args.max_connections
         connected_vehicle_indices = np.where(actions != 0)[0]
 
-        # if q_values is not None:
-        if len(connected_vehicle_indices) > max_connections:
-            if q_values is None:  # randomly drop connections
+        if q_values is not None:
+            max_q_values = q_values.max(axis=1)
+
+            # drop overflow connections with the lowest q values
+            if len(connected_vehicle_indices) > max_connections:
+                gap = len(connected_vehicle_indices) - max_connections
+                drop_indices = np.argsort(max_q_values)
+                drop_indices = drop_indices[
+                    np.isin(drop_indices, connected_vehicle_indices)
+                ]
+                drop_indices = drop_indices[:gap]
+                actions[drop_indices] = 0
+        else:
+            if len(connected_vehicle_indices) > max_connections:
+                gap = len(connected_vehicle_indices) - max_connections
                 drop_indices = np.random.choice(
                     connected_vehicle_indices,
-                    len(connected_vehicle_indices) - max_connections,
+                    gap,
                     replace=False,
                 )
-            else:
-                q_values = q_values[connected_vehicle_indices]
-                drop_indices = np.argpartition(q_values, max_connections)[
-                    max_connections:
-                ]
-
-            actions[connected_vehicle_indices[drop_indices]] = 0
+                actions[drop_indices] = 0
 
         return actions
 
