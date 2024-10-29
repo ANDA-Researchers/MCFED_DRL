@@ -11,7 +11,7 @@ import numpy as np
 
 class Library:
     def __init__(self, args) -> None:
-        print("Initializing Library...")
+        print("Initializing Content Library...")
         if "ml-1m" not in os.listdir("./data"):
             print("Dataset not found. Downloading from grouplens...")
             download_dataset()
@@ -28,8 +28,9 @@ class Library:
         self.unavailable_users = []
 
     def generate_client(self):
-        top_user = self.ratings["user_id"].value_counts()
-        top_user = top_user[top_user > 20].index
+        # get top 10% of users with most ratings
+        top_user = self.ratings["user_id"].value_counts().index[:100]
+
         choosen = np.random.choice(top_user, replace=False)
         while choosen in self.unavailable_users:
             choosen = np.random.choice(top_user, replace=False)

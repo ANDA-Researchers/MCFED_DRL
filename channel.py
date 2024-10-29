@@ -3,14 +3,19 @@ import numpy as np
 
 class V2X:
     def __init__(self, args=None) -> None:
-        self.B_sub = 540e3  # 540 kHz
+        self.B_sub = 1e6  # 540 kHz
         self.P_bs = 43
         self.P_rsu = 30
         self.sigma2 = -114
-        self.shadow_std = 8
+        self.shadow_std = 4
         self.decorrelation_distance = 50
+
         self.h_bs = 25 - 1.5  # antenna height of BS
         self.h_rsu = 5 - 1.5  # antenna height of RSU
+
+        self.v_atten_gain = 3  # vehicle antenna gain
+        self.r_atten_gain = 5
+        self.bs_atten_gain = 14  # BS antenna gain
 
         self.noise_power = 10 ** (self.sigma2 / 10)
 
@@ -80,8 +85,9 @@ class V2X:
             (
                 self.P_bs
                 - path_loss_values[:, 0]
-                + shadowing_values[:, 0]
-                + fast_fading_values[:, 0]
+                - shadowing_values[:, 0]
+                - fast_fading_values[:, 0]
+                + 6
             )
             / 10
         )
@@ -90,15 +96,19 @@ class V2X:
             (
                 self.P_rsu
                 - path_loss_values[:, 1]
-                + shadowing_values[:, 1]
-                + fast_fading_values[:, 1]
+                - shadowing_values[:, 1]
+                - fast_fading_values[:, 1]
+                + 6
             )
             / 10
         )
 
         self.channel_gain = np.column_stack((channel_gain_bs, channel_gain_rsu))
 
-        self.data_rate = self.B_sub * np.log2(1 + self.channel_gain / self.noise_power)
+        data_rate_bs = self.B_sub * np.log2(1 + channel_gain_bs / self.noise_power)
+        data_rate_rsu = self.B_sub * np.log2(1 + channel_gain_rsu / self.noise_power)
+
+        self.data_rate = np.column_stack((data_rate_bs, data_rate_rsu))
 
         return self.channel_gain, self.data_rate
 

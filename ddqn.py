@@ -1,152 +1,121 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import numpy as np
 import random
-from collections import deque
+from collections import deque, namedtuple
+
+import torch
+import torch.optim as optim
+from torch import nn
+
+Transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
 
 
-class DDNQ(nn.Module):
-    def __init__(self, input_size, num_vehicle, num_rsu):
-        super(DDNQ, self).__init__()
+class ReplayMemory(object):
+    def __init__(self, capacity):
+        self.memory = deque([], maxlen=capacity)
 
-        self.num_vehicle = num_vehicle
-        self.num_rsu = num_rsu
+    def push(self, *args):
+        """Save a transition"""
+        self.memory.append(Transition(*args))
 
-        self.fc1 = nn.Linear(input_size, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, num_vehicle * (num_rsu + 2))
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+
+
+class MLP(nn.Module):
+    def __init__(
+        self,
+        input_dim,
+        output_dim,
+        hidden_dim=64,
+    ):
+        super(MLP, self).__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, output_dim)
+        self.relu = nn.ReLU()
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = self.relu(self.fc1(x))
+        x = self.relu(self.fc2(x))
         x = self.fc3(x)
-
-        # reshape to (batch_size, num_vehicle, num_rsu + 2)
-        x = x.view(-1, self.num_vehicle, self.num_rsu + 2)
-
         return x
 
 
-class DDNQAgent:
+class DDQN(object):
     def __init__(
         self,
         state_dim,
-        num_vehicle,
-        num_rsu,
-        device,
-        args,
-        lr=0.001,
+        action_dim,
+        hidden_dim=64,
         gamma=0.99,
-        epsilon=1.0,
-        epsilon_min=0.01,
+        lr=1e-3,
+        capacity=10000,
+        batch_size=64,
+        target_update=10,
         epsilon_decay=0.995,
-        writer=None,
+        epsilon_min=0.01,
+        device="cpu",
+        logger=None,
     ):
-
         self.state_dim = state_dim
-        self.num_vehicle = num_vehicle
-        self.num_rsu = num_rsu
+        self.action_dim = action_dim
         self.device = device
         self.gamma = gamma
-        self.epsilon = epsilon
-        self.epsilon_min = epsilon_min
+        self.epsilon = 1.0
         self.epsilon_decay = epsilon_decay
-        self.writer = writer
-        self.steps = 0
+        self.epsilon_min = epsilon_min
+        self.target_update = target_update
 
-        self.policy_net = DDNQ(state_dim, num_vehicle, num_rsu).to(device)
-        self.target_net = DDNQ(state_dim, num_vehicle, num_rsu).to(device)
+        self.policy_net = MLP(state_dim, action_dim, hidden_dim).to(self.device)
+        self.target_net = MLP(state_dim, action_dim, hidden_dim).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
-        self.memory = deque(maxlen=10000)
+        self.memory = ReplayMemory(capacity)
+        self.batch_size = batch_size
+        self.steps = 0
 
-        self.args = args
+        self.logger = logger
 
-    def select_action(self, state):
-        q_values = None
-        if np.random.rand() <= self.epsilon:
-            actions = np.random.randint(
-                0, self.num_vehicle * (self.num_rsu + 2), self.num_vehicle
-            )
-        state_tensor = (
-            state.detach()
-            if torch.is_tensor(state)
-            else torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        )
+    def act(self, state, sample=False):
+        # random sample
+        if sample:
+            return torch.randint(0, self.action_dim, (1,)).to(self.device)
+
+        # epsilon gready
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+        if torch.rand(1).item() < self.epsilon:
+            return torch.randint(0, self.policy_net.fc3.out_features, (1,))
+
+        state = state.to(self.device).unsqueeze(0)
         with torch.no_grad():
-            q_values = self.policy_net(state_tensor).squeeze(0)
-            actions = q_values.argmax(dim=1).cpu().numpy()
+            state = state.to(self.device).unsqueeze(0)
+            return self.policy_net(state).argmax(1)
 
-        # update epsilon
-        self.update_epsilon()
-
-        return actions
-
-    # def filter_actions(self, actions, q_values=None):
-    #     max_connections = self.args.max_connections
-    #     connected_vehicle_indices = np.where(actions != 0)[0]
-
-    #     if q_values is not None:
-    #         max_q_values = q_values.max(axis=1)
-
-    #         # drop overflow connections with the lowest q values
-    #         if len(connected_vehicle_indices) > max_connections:
-    #             gap = len(connected_vehicle_indices) - max_connections
-    #             drop_indices = np.argsort(max_q_values)
-    #             drop_indices = drop_indices[
-    #                 np.isin(drop_indices, connected_vehicle_indices)
-    #             ]
-    #             drop_indices = drop_indices[:gap]
-    #             actions[drop_indices] = 0
-    #     else:
-    #         if len(connected_vehicle_indices) > max_connections:
-    #             gap = len(connected_vehicle_indices) - max_connections
-    #             drop_indices = np.random.choice(
-    #                 connected_vehicle_indices,
-    #                 gap,
-    #                 replace=False,
-    #             )
-    #             actions[drop_indices] = 0
-
-    #     return actions
-
-    def update_target(self):
-        self.target_net.load_state_dict(self.policy_net.state_dict())
-
-    def update_epsilon(self):
-        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-
-    def update_memory(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-
-    def train(self, batch_size=32):
-        if len(self.memory) < batch_size:
+    def learn(self):
+        if len(self.memory) < self.batch_size:
             return
 
-        batch = random.sample(self.memory, batch_size)
+        transitions = self.memory.sample(self.batch_size)
+        batch = Transition(*zip(*transitions))
 
-        states, actions, rewards, next_states, dones = zip(*batch)
-        states = torch.FloatTensor(np.array(states)).to(self.device)
-        actions = torch.LongTensor(np.array(actions)).to(self.device)
-        rewards = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
-        next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
-        dones = torch.FloatTensor(dones).unsqueeze(1).to(self.device)
+        state = torch.cat(batch.state).to(self.device)
+        action = torch.cat(batch.action).to(self.device)
+        next_state = torch.cat(batch.next_state).to(self.device)
+        reward = torch.cat(batch.reward).to(self.device)
 
-        q_values = self.policy_net(states)
+        state_action_values = self.policy_net(state).gather(1, action)
+        next_state_values = self.target_net(next_state).max(1)[0].detach().unsqueeze(1)
+        expected_state_action_values = reward + self.gamma * next_state_values
 
-        q_values = q_values.gather(2, actions.unsqueeze(2)).squeeze(2)
-
-        with torch.no_grad():
-            next_q_values = self.target_net(next_states).argmax(dim=2)
-            target_q_values = rewards + (1 - dones) * self.gamma * next_q_values
-
-        loss = F.mse_loss(q_values, target_q_values)
-
-        self.writer.add_scalar("Loss", loss.item(), self.steps)
+        loss = torch.nn.functional.mse_loss(
+            state_action_values, expected_state_action_values
+        )
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -154,4 +123,12 @@ class DDNQAgent:
 
         self.steps += 1
 
-        return loss.item()
+        if self.steps % self.target_update == 0:
+            self.update_target()
+
+        if self.logger:
+            self.logger.add_scalar("loss", loss.item(), self.steps)
+            self.logger.add_scalar("epsilon", self.epsilon, self.steps)
+
+    def update_target(self):
+        self.target_net.load_state_dict(self.policy_net.state_dict())

@@ -1,7 +1,9 @@
-import numpy as np
+import time
+import numpy as npd
+import torch
 from tqdm import tqdm
 from cache import random_cache, mcfed
-from ddqn import DDNQAgent
+from ddqn import DDQN
 from environment import Environment
 import os
 import datetime
@@ -9,177 +11,76 @@ from torch.utils.tensorboard import SummaryWriter
 
 from options import parse_args
 
-
-class OutputHandler:
-    def __init__(self, name, args):
-        self.args = args
-        self.created = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
-        self.delays = []
-        self.requests = []
-        self.hits = []
-        self.name = name
-        self.save_dir = os.path.join(
-            "logs",
-            f"{self.name}_{args.rsu_capacity}_{args.num_vehicle}_{self.created}",
-        )
-
-        os.makedirs(self.save_dir, exist_ok=True)
-        self.writer = SummaryWriter(log_dir=self.save_dir, flush_secs=1)
-
-    def log(self, delay, total_hits, total_request, timestep):
-        self.delays.extend(delay)
-        self.requests.append(total_request)
-        self.hits.append(total_hits)
-
-        step_avg_delay = np.mean(delay) if len(delay) != 0 else 0
-        step_hit_ratio = total_hits / total_request if total_request != 0 else 1
-
-        self.writer.add_scalar(
-            f"Average Tranmission Delay",
-            step_avg_delay,
-            timestep,
-        )
-        self.writer.add_scalar(
-            f"Average Cache Hit ratio",
-            step_hit_ratio,
-            timestep,
-        )
-
-        print(
-            f"[Timestep {timestep}] Average Tranmission Delay for {self.name}: ",
-            step_avg_delay,
-        )
-        print(
-            f"[Timestep {timestep}] Average Cache Hit ratio for {self.name}: ",
-            step_hit_ratio,
-        )
-
-
 args = parse_args()
 
 
 def main():
 
-    drl_delivery_logger = OutputHandler("ddqn", args)
+    created_at = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
+
+    save_dir = os.path.join(
+        "logs",
+        f"{args.num_rsu}_{args.rsu_capacity}_{args.num_vehicle}_{created_at}",
+    )
+
+    logger = SummaryWriter(log_dir=save_dir, flush_secs=1)
 
     env = Environment(
         args=args,
     )
 
-    drl_agent = DDNQAgent(
+    agent = DDQN(
         state_dim=env.state_dim,
-        num_vehicle=args.num_vehicle,
-        num_rsu=args.num_rsu,
-        device=args.gpu,
-        lr=0.001,
-        writer=drl_delivery_logger.writer,
-        args=args,
+        action_dim=env.action_dim,
+        hidden_dim=128,
+        gamma=args.gamma,
+        lr=args.lr,
+        capacity=args.capacity,
+        batch_size=args.batch_size,
+        target_update=args.target_update,
+        epsilon_decay=args.epsilon_decay,
+        epsilon_min=args.epsilon_min,
+        device=args.device,
+        logger=logger,
     )
 
     # Train the agent
-    for episode in range(args.episode):
-
+    for episode in range(args.episodes):
         total_reward = 0
-        env.reset()
+        state = env.reset()
 
-        for timestep in tqdm(range(args.num_rounds * args.time_step_per_round)):
-            current_round = timestep // args.num_rounds
-            step = timestep % args.time_step_per_round
+        for round in tqdm(
+            range(args.num_rounds), desc=f"Episode {episode}", unit="round"
+        ):
+            # Put cache replacement policy here
+            mcfed(env)
 
-            begin_round = step == 0
+            # Delivery phase
+            for timestep in tqdm(
+                range(args.time_step_per_round),
+                desc=f"Round {round}",
+                unit="time step",
+            ):
+                action = agent.act(state, sample=True)
 
-            if begin_round:
-                # random_cache(env)  # random cache placement for train the delivery agent
-                mcfed(env)
+                next_state, reward = env.step(action)
 
-            # get state
-            state = env.state
+                # agent.memory.push(
+                #     state.unsqueeze(0).to("cpu"),
+                #     action.unsqueeze(0).to("cpu"),
+                #     next_state.unsqueeze(0).to("cpu"),
+                #     reward.unsqueeze(0).to("cpu"),
+                # )
 
-            # get actions
-            actions = drl_agent.select_action(
-                state,
-            )
+                # agent.learn()
 
-            # compute reward
-            delays, total_request, total_hits = compute_delay(args, env, actions)
+                # total_reward += reward
 
-            env.step(actions)
+                # state = next_state
 
-            next_state = env.state
-
-            reward = np.mean(delays) if len(delays) != 0 else 0
-            reward = 1 / np.exp(reward)
-
-            hit_ratio = total_hits / total_request
-
-            drl_delivery_logger.writer.add_scalar(
-                "Hit Ratio per step",
-                hit_ratio,
-                drl_agent.steps,
-            )
-
-            drl_delivery_logger.writer.add_scalar(
-                "Avg delay", np.mean(delays), drl_agent.steps
-            )
-
-            done = timestep == args.num_rounds * args.time_step_per_round - 1
-
-            drl_agent.memory.append((state, actions, reward, next_state, done))
-
-            drl_agent.train(env.args.batch_size)
-
-            total_reward += reward
-
-            drl_agent.writer.add_scalar(
-                "Reward per step",
-                reward,
-                drl_agent.steps,
-            )
-
-            if begin_round:
-                drl_agent.update_target()
-
-
-def compute_delay(args, env, actions):
-    delays = []
-    total_hits = 0
-
-    # count request (!=0)
-    total_request = np.count_nonzero(env.request)
-
-    request_vehicle_ids = np.where(env.request != 0)[0]
-
-    for vehicle_idx in request_vehicle_ids:
-        action = int(actions[vehicle_idx])
-        local_rsu = env.mobility.reverse_coverage[vehicle_idx]
-        requested_content = np.where(env.request[vehicle_idx] != 0)[0][0]
-
-        rsu_rate = env.channel.data_rate[vehicle_idx][1]
-        bs_rate = env.channel.data_rate[vehicle_idx][0]
-
-        rsu_delay = args.content_size / rsu_rate
-        bs_delay = args.content_size / bs_rate
-        fiber_delay = args.content_size / args.fiber_rate
-        backhaul_delay = args.content_size / args.cloud_rate
-
-        if action == 0:
-            delay = bs_delay
-
-        elif action == args.num_rsu + 1:
-            delay = backhaul_delay + rsu_delay
-
-        elif action - 1 == local_rsu and env.rsu[local_rsu].had(requested_content):
-            delay = rsu_delay
-            total_hits += 1
-        elif env.rsu[action - 1].had(requested_content):
-            delay = rsu_delay + fiber_delay
-            total_hits += 1
-        else:
-            delay = bs_delay
-
-        delays.append(delay)
-
-    return delays, total_request, total_hits
+        agent.logger.add_scalar(
+            "Average reward", total_reward / args.num_rounds, episode
+        )
 
 
 if __name__ == "__main__":

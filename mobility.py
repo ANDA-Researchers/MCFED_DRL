@@ -5,23 +5,21 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 
+from interrupt import Interrupt
 from library import Library
 from model import DNN
 
 
 class Vehicle:
-    def __init__(self, position: tuple, velocity: float, data: dict, model) -> None:
+    def __init__(
+        self, position: tuple, velocity: float, data: dict, model, device, local_epochs
+    ) -> None:
         self.position = position
         self.velocity = velocity
         self.data = data
         self.model = model
-
-        gpu = 0
-
-        if gpu != -1:
-            self.device = torch.device("cuda:" + str(gpu))
-        else:
-            self.device = torch.device("cpu")
+        self.local_epochs = local_epochs
+        self.device = device
 
         self.model = model.to(self.device)
 
@@ -78,7 +76,7 @@ class Vehicle:
         epochs_no_improve = 0
         best_weights = copy.deepcopy(self.model.state_dict())
 
-        for _ in range(200):
+        for _ in range(self.local_epochs):
             total_loss = 0
             for data in train_loader:
                 optimizer.zero_grad()
@@ -123,6 +121,7 @@ class RSU:
         self.cache = np.random.randint(1, 3952, capacity)
         self.model = model
         self.cluster = None
+        self.interrupt = Interrupt()
 
     def had(self, data: int) -> bool:
         return data in self.cache
@@ -150,6 +149,8 @@ class Mobility:
 
         self.library = Library(args)
         self.base_model = DNN(50, 1)
+        self.local_epochs = args.num_local_epochs
+        self.device = args.device
 
         assert (
             self.length % self.rsu_coverage == 0
@@ -204,7 +205,14 @@ class Mobility:
         data = self.library.generate_client()
         model = self.base_model
 
-        new_vehicle = Vehicle(position, velocity, data, model)
+        new_vehicle = Vehicle(
+            position,
+            velocity,
+            data,
+            model,
+            self.device,
+            self.local_epochs,
+        )
 
         self.vehicle.append(new_vehicle)
 
@@ -224,10 +232,10 @@ class Mobility:
         # compure distance from the BS
         distance_2 = np.zeros((self.num_vehicle, 1))  # num_vehicle * 1
         for i, vehicle in enumerate(self.vehicle):
-            distance_2[i] = np.sqrt((vehicle.position - self.bs.position) ** 2 + 1e-6)
+            distance_2[i] = np.sqrt((vehicle.position - self.bs.position) ** 2 + 1e6)
 
         self.distance = np.max(self.distance, axis=1).reshape(-1, 1)
-        self.distance = np.concatenate([self.distance, distance_2], axis=1)
+        self.distance = np.concatenate([distance_2, self.distance], axis=1)
 
     def update_request(self):
         self.request = np.zeros((self.num_vehicle, self.library.max_movie_id + 1))
