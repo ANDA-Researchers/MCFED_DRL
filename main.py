@@ -2,6 +2,7 @@ import time
 import numpy as npd
 import torch
 from tqdm import tqdm
+from a2c import A2C
 from cache import random_cache, mcfed
 from ddqn import DDQN
 from environment import Environment
@@ -20,7 +21,7 @@ def main():
 
     save_dir = os.path.join(
         "logs",
-        f"{args.num_rsu}_{args.rsu_capacity}_{args.num_vehicle}_{created_at}",
+        f"[{created_at}] {args.num_rsu}_{args.rsu_capacity}_{args.num_vehicle}",
     )
 
     logger = SummaryWriter(log_dir=save_dir, flush_secs=1)
@@ -29,58 +30,71 @@ def main():
         args=args,
     )
 
-    agent = DDQN(
+    # agent = DDQN(
+    #     state_dim=env.state_dim,
+    #     action_dim=env.action_dim,
+    #     hidden_dim=512,
+    #     gamma=args.gamma,
+    #     lr=args.lr,
+    #     capacity=args.capacity,
+    #     batch_size=args.batch_size,
+    #     target_update=args.target_update,
+    #     epsilon_decay=args.epsilon_decay,
+    #     epsilon_min=args.epsilon_min,
+    #     device=args.device,
+    #     logger=logger,
+    # )
+
+    agent = A2C(
         state_dim=env.state_dim,
-        action_dim=env.action_dim,
-        hidden_dim=128,
+        action_dim=args.num_rsu + 2,
+        num_actions=args.num_vehicle,
+        hidden_dim=512,
         gamma=args.gamma,
         lr=args.lr,
-        capacity=args.capacity,
-        batch_size=args.batch_size,
-        target_update=args.target_update,
-        epsilon_decay=args.epsilon_decay,
-        epsilon_min=args.epsilon_min,
         device=args.device,
         logger=logger,
+        capacity=args.capacity,
+        batch_size=args.batch_size,
     )
+
+    reward_tracking = []
 
     # Train the agent
     for episode in range(args.episodes):
+
         total_reward = 0
         state = env.reset()
 
-        for round in tqdm(
-            range(args.num_rounds), desc=f"Episode {episode}", unit="round"
-        ):
-            # Put cache replacement policy here
-            mcfed(env)
+        for _ in tqdm(range(50000)):
+            random_cache(env)
 
-            # Delivery phase
-            for timestep in tqdm(
-                range(args.time_step_per_round),
-                desc=f"Round {round}",
-                unit="time step",
-            ):
-                action = agent.act(state, sample=True)
+            action, action_prob = agent.act(state)
 
-                next_state, reward = env.step(action)
+            next_state, reward = env.step(action)
 
-                # agent.memory.push(
-                #     state.unsqueeze(0).to("cpu"),
-                #     action.unsqueeze(0).to("cpu"),
-                #     next_state.unsqueeze(0).to("cpu"),
-                #     reward.unsqueeze(0).to("cpu"),
-                # )
+            agent.memory.push(
+                state.unsqueeze(0).to("cpu"),
+                action.to("cpu"),
+                next_state.unsqueeze(0).to("cpu"),
+                reward.unsqueeze(0).to("cpu"),
+                action_prob.to("cpu"),
+            )
 
-                # agent.learn()
+            agent.learn()
 
-                # total_reward += reward
+            total_reward += reward
 
-                # state = next_state
+            reward_tracking.append(reward)
 
-        agent.logger.add_scalar(
-            "Average reward", total_reward / args.num_rounds, episode
-        )
+            state = next_state
+
+            if agent.steps % 100 == 0:
+                agent.logger.add_scalar(
+                    "Avg reward", sum(reward_tracking[-100:]) / 100, agent.steps
+                )
+
+        agent.logger.add_scalar("Cummulative reward", total_reward, episode)
 
 
 if __name__ == "__main__":

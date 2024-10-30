@@ -31,9 +31,9 @@ class Library:
         # get top 10% of users with most ratings
         top_user = self.ratings["user_id"].value_counts().index[:100]
 
-        choosen = np.random.choice(top_user, replace=False)
+        choosen = np.random.choice(top_user)
         while choosen in self.unavailable_users:
-            choosen = np.random.choice(top_user, replace=False)
+            choosen = np.random.choice(top_user)
         self.unavailable_users.append(choosen)
         history, ratings = self.get_inputs(choosen)
 
@@ -67,14 +67,13 @@ class Library:
         user_ratings = self.ratings[self.ratings["user_id"] == user_id]
         movie_ids = user_ratings["movie_id"].values
         ratings = user_ratings["rating"].values
-
         return torch.tensor(movie_ids), torch.tensor(ratings)
 
     def return_uid(self, uid):
         self.unavailable_users.remove(uid)
 
     def reset(self):
-        self.available_users = []
+        self.unavailable_users = []
 
     def step(self):
         pass

@@ -168,6 +168,7 @@ class Mobility:
         positions = self.uniform()
         self.rsu = []
         self.vehicle = []
+        self.library.reset()
 
         """ Distribute vehicles uniformly on the road """
         for i in range(self.num_vehicle):

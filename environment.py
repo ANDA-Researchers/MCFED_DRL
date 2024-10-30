@@ -12,20 +12,20 @@ class Environment:
         self.interupt = lambda x: 1.012**x - 1
         self.args = args
 
-        self.action_spaces = np.array(
-            list(
-                product(
-                    *[
-                        range(self.args.num_rsu + 2)
-                        for _ in range(self.args.num_vehicle)
-                    ]
-                )
-            )
-        )
+        # self.action_spaces = np.array(
+        #     list(
+        #         product(
+        #             *[
+        #                 range(self.args.num_rsu + 2)
+        #                 for _ in range(self.args.num_vehicle)
+        #             ]
+        #         )
+        #     )
+        # )
 
-    def decision(self, action):
-        action = action.squeeze().cpu().numpy()
-        return self.action_spaces[action]
+    # def decision(self, action):
+    #     action = action.squeeze().cpu().numpy()
+    #     return self.action_spaces[action]
 
     def reset(self):
         self.mobility.reset()
@@ -35,6 +35,7 @@ class Environment:
         return self.state
 
     def step(self, action):
+        action = action.cpu().numpy()
         avg_delay, hit_ratio, success_ratio = self.compute_delay(action)
 
         reward = (
@@ -67,19 +68,19 @@ class Environment:
         total_success = 0
         total_request = np.count_nonzero(self.request)
         request_vehicles = np.where(self.request != 0)[0]
-        action = self.decision(action)
+        # action = self.decision(action) # when using DQN
 
         for vehicle_idx in request_vehicles:
 
             # get the data rate of the vehicle
-            bs_rate = self.channel.data_rate[vehicle_idx][0]
+            bs_rate = 3000000  # self.channel.data_rate[vehicle_idx][0]
             rsu_rate = self.channel.data_rate[vehicle_idx][1]
 
             # compute the delay for the vehicle
             rsu_delay = self.args.content_size / rsu_rate
             bs_delay = self.args.content_size / bs_rate
             fiber_delay = self.args.content_size / self.args.fiber_rate
-            backhaul_delay = self.args.content_size / self.args.cloud_rate
+            backhaul_delay = self.args.content_size / 5000000
 
             # download from BS
             if action[vehicle_idx] == 0:

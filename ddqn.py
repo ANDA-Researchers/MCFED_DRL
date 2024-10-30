@@ -2,8 +2,8 @@ import random
 from collections import deque, namedtuple
 
 import torch
+import torch.nn as nn
 import torch.optim as optim
-from torch import nn
 
 Transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
 
@@ -90,11 +90,10 @@ class DDQN(object):
             self.epsilon *= self.epsilon_decay
 
         if torch.rand(1).item() < self.epsilon:
-            return torch.randint(0, self.policy_net.fc3.out_features, (1,))
+            return torch.randint(0, self.action_dim, (1,)).to(self.device)
 
         state = state.to(self.device).unsqueeze(0)
         with torch.no_grad():
-            state = state.to(self.device).unsqueeze(0)
             return self.policy_net(state).argmax(1)
 
     def learn(self):
