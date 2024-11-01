@@ -1,12 +1,17 @@
+"""
+Big thanks to the authors of the following papers:
+- "Action Branching Architectures for Deep Reinforcement Learning" 
+by Pierre-Luc Bacon, Jean Harb, Martin G. Bellemare, Doina Precup
+"""
+
 import random
-import torch
-import numpy as np
-
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-
 from collections import deque, namedtuple
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 
 
 class ReplayMemory(object):

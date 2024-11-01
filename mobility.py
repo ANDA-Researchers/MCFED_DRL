@@ -123,9 +123,17 @@ class RSU:
         self.model = model
         self.cluster = None
         self.interrupt = Interrupt()
+        self.interrupt.reset()
 
     def had(self, data: int) -> bool:
         return data in self.cache
+
+    def is_interrupt(self):
+        return self.interrupt.is_interrupt
+
+    def step(self, power):
+        self.interrupt.step(power)
+        return self.interrupt.is_interrupt
 
 
 class BS:
@@ -183,7 +191,6 @@ class Mobility:
             model = self.base_model
 
             new_rsu = RSU(position, capacity, model)
-
             self.rsu.append(new_rsu)
 
         self.update_coverage()

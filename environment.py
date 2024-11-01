@@ -12,17 +12,6 @@ class Environment:
         self.interupt = lambda x: 1.012**x - 1
         self.args = args
 
-        # self.action_spaces = np.array(
-        #     list(
-        #         product(
-        #             *[
-        #                 range(self.args.num_rsu + 2)
-        #                 for _ in range(self.args.num_vehicle)
-        #             ]
-        #         )
-        #     )
-        # )
-
     # def decision(self, action):
     #     action = action.squeeze().cpu().numpy()
     #     return self.action_spaces[action]
@@ -41,8 +30,8 @@ class Environment:
         reward = (
             torch.tensor(
                 -avg_delay * self.args.alpha
-                + hit_ratio * self.args.beta
-                + success_ratio * self.args.mu,
+                + hit_ratio * self.args.mu
+                + success_ratio * self.args.beta,
                 dtype=torch.float32,
             )
             .unsqueeze(0)
@@ -70,6 +59,16 @@ class Environment:
         request_vehicles = np.where(self.request != 0)[0]
         # action = self.decision(action) # when using DQN
 
+        connection_count = torch.zeros(self.args.num_rsu, dtype=torch.int32)
+
+        for a in action:
+            if 0 < a < self.args.num_rsu + 1:
+                connection_count[a - 1] += 1
+
+        for i in range(self.args.num_rsu):
+            power = self.channel.P_rsu * connection_count[i]
+            self.rsu[i].step(power)
+
         for vehicle_idx in request_vehicles:
 
             # get the data rate of the vehicle
@@ -82,6 +81,12 @@ class Environment:
             fiber_delay = self.args.content_size / self.args.fiber_rate
             backhaul_delay = self.args.content_size / self.args.cloud_rate
 
+            local_rsu = self.get_local_rsu_of_vehicle(vehicle_idx)
+            requested = self.get_request_of_vehicle(vehicle_idx)
+            current_rsu = action[vehicle_idx] - 1
+
+            local_interrupted = self.rsu[local_rsu].is_interrupt()
+
             # download from BS
             if action[vehicle_idx] == 0:
                 delay = bs_delay
@@ -90,7 +95,7 @@ class Environment:
             # download from BS via local RSU
             elif action[vehicle_idx] > self.args.num_rsu:
                 # local rsu is not interruped
-                if True:
+                if not local_interrupted:
                     delay = rsu_delay + backhaul_delay
                     total_success += 1
 
@@ -100,19 +105,24 @@ class Environment:
 
             # download from RSU
             else:
-                local_rsu = self.get_local_rsu_of_vehicle(vehicle_idx)
-                requested = self.get_request_of_vehicle(vehicle_idx)
-                current_rsu = action[vehicle_idx] - 1
-
+                current_interrupted = self.rsu[current_rsu].is_interrupt()
                 # local rsu is not interruped and the requested data is in the rsu
-                if self.rsu[current_rsu].had(requested) and True:
+                if (
+                    self.rsu[current_rsu].had(requested)
+                    and not current_interrupted
+                    and not local_interrupted
+                ):
                     delay = rsu_delay
                     total_hits += 1
                     total_success += 1
 
                     # if the current rsu is not the local rsu, add the fiber delay
                     if local_rsu != current_rsu:
-                        hop = 1
+                        distance = abs(
+                            self.rsu[current_rsu].position
+                            - self.vehicle[vehicle_idx].position
+                        )
+                        hop = distance // 1000
                         delay += fiber_delay * hop
 
                 # fallback to BS
@@ -147,7 +157,8 @@ class Environment:
     @property
     def state_dim(self):
         return (
-            self.args.num_vehicle * 2
+            self.args.num_rsu
+            + self.args.num_vehicle * 2
             + self.args.num_vehicle * 2
             + self.args.num_vehicle * self.args.num_rsu
             + self.args.num_vehicle * (self.mobility.library.max_movie_id + 1)
@@ -172,8 +183,13 @@ class Environment:
         request = self.mobility.request.flatten()  # N * (L + 1)
         storage = self.mobility.storage.flatten()  # M * (L + 1)
 
+        interrupt = np.zeros(len(self.rsu))
+        for i, rsu in enumerate(self.rsu):
+            if rsu.is_interrupt():
+                interrupt[i] = 1
+
         state = np.concatenate(
-            [channel_state, distance, coverage_matrix, request, storage]
+            [interrupt, channel_state, distance, coverage_matrix, request, storage]
         )
 
         self.state = torch.tensor(state, dtype=torch.float32).to(self.args.device)

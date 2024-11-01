@@ -25,7 +25,6 @@ class Interrupt(object):
 
     def sample_interrupt(self, power):
         interrupt_prob = (self.state**power - 1) / 100
-        print("interrupt_prob:", interrupt_prob)
 
         if np.random.rand() < interrupt_prob:
             self.recovery_time = np.random.randint(4, 7)
@@ -49,7 +48,7 @@ if __name__ == "__main__":
 
     for _ in range(200):
         time.sleep(1)
-        power = np.random.randint(1, 10) * 30
+        power = np.random.randint(8, 10) * 30
         interrupt.step(power)
         print("power:", power)
         print("interrupt:", interrupt.is_interrupt)
