@@ -73,14 +73,14 @@ class Environment:
         for vehicle_idx in request_vehicles:
 
             # get the data rate of the vehicle
-            bs_rate = 3000000  # self.channel.data_rate[vehicle_idx][0]
-            rsu_rate = self.channel.data_rate[vehicle_idx][1]
+            bs_rate = self.channel.data_rate[0][vehicle_idx]
+            rsu_rate = self.channel.data_rate[1][vehicle_idx]
 
             # compute the delay for the vehicle
             rsu_delay = self.args.content_size / rsu_rate
-            bs_delay = self.args.content_size / bs_rate
+            bs_delay = self.args.content_size / 2e6
             fiber_delay = self.args.content_size / self.args.fiber_rate
-            backhaul_delay = self.args.content_size / 5000000
+            backhaul_delay = self.args.content_size / self.args.cloud_rate
 
             # download from BS
             if action[vehicle_idx] == 0:

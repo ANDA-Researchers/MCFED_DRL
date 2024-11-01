@@ -45,7 +45,8 @@ class Vehicle:
 
     @property
     def request(self):
-        return np.random.choice(self.test_ids)
+        # return np.random.choice(self.test_ids)
+        return np.random.choice(list(range(0, self.movies.shape[0])))
 
     def predict(self):
         self.model.eval()

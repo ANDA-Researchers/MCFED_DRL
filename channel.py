@@ -103,12 +103,16 @@ class V2X:
             / 10
         )
 
-        self.channel_gain = np.column_stack((channel_gain_bs, channel_gain_rsu))
+        self.channel_gain = np.concatenate(
+            [channel_gain_bs.reshape(1, -1), channel_gain_rsu.reshape(1, -1)], axis=0
+        )
 
         data_rate_bs = self.B_sub * np.log2(1 + channel_gain_bs / self.noise_power)
         data_rate_rsu = self.B_sub * np.log2(1 + channel_gain_rsu / self.noise_power)
 
-        self.data_rate = np.column_stack((data_rate_bs, data_rate_rsu))
+        self.data_rate = np.concatenate(
+            [data_rate_bs.reshape(1, -1), data_rate_rsu.reshape(1, -1)], axis=0
+        )
 
         return self.channel_gain, self.data_rate
 
