@@ -2,25 +2,25 @@ Metrics:
 	- [x] Avg Delay
 	- [x] Hit-ratio
 
-=== Federated Learning === ??? very ??? (may be adapt the FedFast)
+### Federated Learning ??? very ??? (may be adapt the FedFast)
 [] Integrate 2 other branches // quick
 
-=== Simulation ===
+### Simulation
 [x] Fix the environment
 [x] Add the interrupt
 
-=== DRL ===
+### DRL
 [x] Action Branching
 [] Action Masking
 [] Attention Output
 [] Prioritized Memory
 
-=== Experiment ===
+### Experiment
 [x] Training results 40 vehicle
 	- w interrupt
 	- w/o interrupt
 
-Setup baselines
+### Setup baselines
 	Cache Strategy
 	- [] Greedy: Cache the topmost requested content for the last time step.
 	- [50%] AvgFed: cache replacement based on Avg federated learning CPP
@@ -51,7 +51,7 @@ Ablation Study
 [] w/wo Interrupt Rate
 
 
-=== Writing ===
+Writing ===
 
 - Recheck the communication model, problem formulation
 - Mobility Model
