@@ -45,7 +45,8 @@ class Vehicle:
 
     @property
     def request(self):
-        return np.random.choice(self.test_ids)
+        # return np.random.choice(self.test_ids)
+        return np.random.choice(list(range(0, self.movies.shape[0])))
 
     def predict(self):
         self.model.eval()
@@ -122,9 +123,17 @@ class RSU:
         self.model = model
         self.cluster = None
         self.interrupt = Interrupt()
+        self.interrupt.reset()
 
     def had(self, data: int) -> bool:
         return data in self.cache
+
+    def is_interrupt(self):
+        return self.interrupt.is_interrupt
+
+    def step(self, power):
+        self.interrupt.step(power)
+        return self.interrupt.is_interrupt
 
 
 class BS:
@@ -182,7 +191,6 @@ class Mobility:
             model = self.base_model
 
             new_rsu = RSU(position, capacity, model)
-
             self.rsu.append(new_rsu)
 
         self.update_coverage()
