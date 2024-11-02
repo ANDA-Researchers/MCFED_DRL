@@ -1,3 +1,5 @@
+prefix: ./env
+
 channels:
   - pytorch
   - nvidia
