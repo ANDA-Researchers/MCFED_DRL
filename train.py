@@ -3,7 +3,7 @@ import numpy as npd
 import torch
 from tqdm import tqdm
 from cache import random_cache, mcfed
-from ddqn import BDQNAgent
+from module.ddqn import BDQNAgent
 from environment import Environment
 import os
 import datetime

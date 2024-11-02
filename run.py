@@ -4,7 +4,7 @@ import torch
 from tqdm import tqdm
 from a2c import A2C
 from cache import random_cache, mcfed
-from ddqn import DDQN
+from module.ddqn import DDQN
 from environment import Environment
 import os
 import datetime
