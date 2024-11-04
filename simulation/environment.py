@@ -1,7 +1,7 @@
 import numpy as np
 import torch
-from channel import V2X
-from mobility import Mobility
+from .channel import V2X
+from .mobility import Mobility
 from itertools import product
 
 

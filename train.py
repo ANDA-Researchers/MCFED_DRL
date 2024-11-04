@@ -1,17 +1,15 @@
-import time
-import numpy as npd
 import torch
 from tqdm import tqdm
-from cache import random_cache, mcfed
-from module.ddqn import BDQNAgent
-from environment import Environment
+from cache import random_cache
+from module.bdqn import BDQNAgent
+from simulation import Environment
 import os
 import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-from options import parse_args
+from options import load_args
 
-args = parse_args()
+args = load_args()
 
 
 def main():
@@ -48,17 +46,20 @@ def main():
     reward_tracking = []
 
     # Train the agent
-    for episode in tqdm(range(1, args.episodes + 1)):
+    for episode in range(0, args.episodes):
+        print(f"Episode: {episode}")
 
         total_reward = 0
         state = env.reset()
 
-        for step in tqdm(range(args.training_steps), leave=False):
-            random_cache(env)
-
+        for step in tqdm(range(args.training_steps), leave=False, desc="Steps"):
             action = agent.act(state)
 
-            next_state, reward = env.step(action)
+            _, reward = env.step(action)
+
+            random_cache(env)
+
+            next_state = env.state
 
             agent.memory.push(
                 state.unsqueeze(0).to("cpu"),

@@ -1,13 +1,27 @@
 import copy
+
 import numpy as np
-from scipy.stats import truncnorm
 import torch
+from scipy.stats import truncnorm
 from torch import optim
 from torch.utils.data import DataLoader
 
-from interrupt import Interrupt
-from library import Library
-from model import DNN
+from .interrupt import Interrupt
+from .library import Library
+
+
+class DNN(torch.nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(DNN, self).__init__()
+        self.fc1 = torch.nn.Linear(input_dim, 128)
+        self.fc2 = torch.nn.Linear(128, 64)
+        self.fc3 = torch.nn.Linear(64, output_dim)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 
 class Vehicle:
@@ -146,7 +160,7 @@ class BS:
 
 class Mobility:
     def __init__(self, args) -> None:
-        self.length = args.length
+        self.length = args.num_rsu * args.rsu_coverage
         self.num_vehicle = args.num_vehicle
         self.num_rsu = args.num_rsu
         self.rsu_capacity = args.rsu_capacity

@@ -4,3 +4,4 @@ data/glove.6B/*
 data/*
 !data/emb.json
 TODO.txt
+logs

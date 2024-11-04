@@ -1,5 +1,5 @@
 import torch
-from dataset import (
+from .dataset import (
     load_movies,
     load_ratings,
     compute_cosine_similarities,

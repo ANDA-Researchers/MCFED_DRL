@@ -1,0 +1,15 @@
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - tqdm
+  - python=3.10.14
+  - pytorch-cuda=12.1
+  - torchaudio
+  - torchvision
+  - tensorboard
+  - matplotlib
+  - pandas
+  - numpy=1.26.0
+  - scikit-learn

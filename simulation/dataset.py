@@ -44,7 +44,7 @@ def load_movies():
     sparse_vecs = {}
     semantic_vecs = {}
 
-    with tqdm(range(len(movies)), desc="Creating vectors...") as pbar:
+    with tqdm(range(len(movies)), desc="Initializing vectors") as pbar:
         for index, row in movies.iterrows():
             sparse_vec = row[1:].to_numpy().astype(int)
             semantic_vec = [glove[genre] for genre in genres if row[genre] == 1]
