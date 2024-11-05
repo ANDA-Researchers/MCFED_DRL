@@ -1,9 +1,3 @@
-"""
-Big thanks to the authors of the following papers:
-- "Action Branching Architectures for Deep Reinforcement Learning" 
-by Pierre-Luc Bacon, Jean Harb, Martin G. Bellemare, Doina Precup
-"""
-
 import random
 from collections import deque, namedtuple
 
@@ -73,9 +67,8 @@ class BDQN(nn.Module):
                 nn.ReLU(),
                 nn.Linear(hidden_dim, 1),
             )
-        pass
 
-    def forward(self, state):
+    def forward(self, state, mask=None):
         out = self.common(state)
 
         action_scores = [actor_branch(out) for actor_branch in self.actor_branches]
@@ -94,7 +87,14 @@ class BDQN(nn.Module):
                     for score in action_scores
                 ]
 
-        return action_scores
+        # TODO: Add the action masking here
+        if mask is not None:
+            action_score *= mask
+
+        # TODO: Filter out out of bound actions
+        pass
+
+        return action_scores  # batch, num_actions, action_dim
 
 
 class BDQNAgent:
@@ -148,11 +148,12 @@ class BDQNAgent:
 
         self.steps = 0
 
-    def act(self, state):
+    def act(self, state, mask=None):
         if random.random() > self.epsilon:
             with torch.no_grad():
                 state = state.unsqueeze(0).to(self.device)
-                action_scores = self.policy_net(state)
+                mask = mask.unsqueeze(0).to(self.device)
+                action_scores = self.policy_net(state, mask)
                 action = torch.stack([score.argmax() for score in action_scores])
         else:
             action = torch.tensor(
@@ -164,6 +165,12 @@ class BDQNAgent:
         self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
 
         return action
+
+    def action_mask(self, state, mask):
+        if random.random() > self.epsilon:
+            with torch.no_grad():
+                state = state.unsqueeze(0).to(self.device)
+                action_scores = self.policy_net(state)
 
     def learn(self):
         if len(self.memory) < self.batch_size:

@@ -7,7 +7,7 @@ import os
 import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-from options import load_args
+from utils import load_args
 
 args = load_args()
 
@@ -31,7 +31,7 @@ def main():
         state_dim=env.state_dim,
         num_actions=args.num_vehicle,
         action_dim=args.num_rsu + 2,
-        hidden_dim=512,
+        hidden_dim=args.hidden_dim,
         gamma=args.gamma,
         lr=args.lr,
         capacity=args.capacity,
@@ -50,16 +50,16 @@ def main():
         print(f"Episode: {episode}")
 
         total_reward = 0
-        state = env.reset()
+        state, mask = env.reset()
 
         for step in tqdm(range(args.training_steps), leave=False, desc="Steps"):
             action = agent.act(state)
 
-            _, reward = env.step(action)
+            _, _, reward = env.step(action)
 
             random_cache(env)
 
-            next_state = env.state
+            next_state, next_mask = env.state, env.mask
 
             agent.memory.push(
                 state.unsqueeze(0).to("cpu"),
@@ -76,6 +76,7 @@ def main():
             reward_tracking.append(reward)
 
             state = next_state
+            mask = next_mask
 
         agent.logger.add_scalar("Reward", total_reward / args.training_steps, episode)
 

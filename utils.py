@@ -1,6 +1,8 @@
+import copy
+
 import numpy as np
 import torch
-import copy
+import yaml
 
 
 def cosine_similarity(a, b):
@@ -14,3 +16,11 @@ def average_weights(w):
             w_avg[key] += w[i][key]
         w_avg[key] = torch.div(w_avg[key], len(w))
     return w_avg
+
+
+def load_args():
+    with open("./configs/simulation.yml") as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+
+    args = type("args", (object,), config)()
+    return args

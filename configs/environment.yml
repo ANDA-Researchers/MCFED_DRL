@@ -3,7 +3,9 @@ channels:
   - nvidia
   - conda-forge
 dependencies:
+  - pyyaml
   - tqdm
+  - yaml
   - python=3.10.14
   - pytorch-cuda=12.1
   - torchaudio

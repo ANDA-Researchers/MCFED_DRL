@@ -9,7 +9,6 @@ class Environment:
     def __init__(self, args) -> None:
         self.mobility = Mobility(args)
         self.channel = V2X(args)
-        self.interupt = lambda x: 1.012**x - 1
         self.args = args
 
     # def decision(self, action):
@@ -21,7 +20,7 @@ class Environment:
         self.channel.reset(distance=self.distance)
         self.update_state()
 
-        return self.state
+        return self.state, self.mask
 
     def step(self, action):
         action = action.cpu().numpy()
@@ -42,7 +41,7 @@ class Environment:
         self.channel.step(distance=self.distance)
         self.update_state()
 
-        return self.state, reward
+        return self.state, self.mask, reward
 
     def get_local_rsu_of_vehicle(self, vehicle):
         return self.mobility.reverse_coverage[vehicle]
@@ -157,10 +156,10 @@ class Environment:
     @property
     def state_dim(self):
         return (
-            self.args.num_rsu
-            + self.args.num_vehicle * 2
-            + self.args.num_vehicle * 2
-            + self.args.num_vehicle * self.args.num_rsu
+            2 * self.args.num_vehicle
+            + 1 * self.args.num_vehicle
+            + 1 * self.args.num_rsu
+            + 2 * self.args.num_vehicle
             + self.args.num_vehicle * (self.mobility.library.max_movie_id + 1)
             + self.args.num_rsu * (self.mobility.library.max_movie_id + 1)
         )
@@ -174,25 +173,55 @@ class Environment:
         return self.mobility.library
 
     def update_state(self):
-        channel_state = self.channel.channel_gain.flatten()  # N * 2
-        distance = self.distance.flatten()  # N * 2
-        coverage_matrix = np.zeros((self.args.num_vehicle, len(self.rsu)))
-        for r, v in self.mobility.coverage.items():
-            coverage_matrix[v, r] = 1
-        coverage_matrix = coverage_matrix.flatten()  # N * M
-        request = self.mobility.request.flatten()  # N * (L + 1)
-        storage = self.mobility.storage.flatten()  # M * (L + 1)
+        channel_state = self.channel.channel_gain.flatten()
+        distance = self.distance.flatten()
 
-        interrupt = np.zeros(len(self.rsu))
+        max_position = self.args.num_rsu * self.args.rsu_coverage
+
+        vehicle_position = torch.tensor(
+            [v.position for v in self.vehicle], dtype=torch.float32
+        )
+        rsu_position = torch.tensor([r.position for r in self.rsu], dtype=torch.float32)
+
+        normalized_vehicle_position = vehicle_position / max_position
+        normalized_rsu_position = rsu_position / max_position
+        normalize_distance = distance / max_position
+        request = self.mobility.request
+        storage = self.mobility.storage
+
+        interrupt = np.ones(len(self.rsu))
         for i, rsu in enumerate(self.rsu):
             if rsu.is_interrupt():
-                interrupt[i] = 1
+                interrupt[i] = -1
+
+        normalized_rsu_position = normalized_rsu_position * interrupt
+
+        mask = torch.ones(self.args.num_rsu, self.args.num_vehicle) * -1e9
+
+        for vehicle_idx, rsu_idx in product(
+            range(self.args.num_vehicle), range(self.args.num_rsu)
+        ):
+            if self.rsu[rsu_idx].had(self.vehicle[vehicle_idx].request):
+                mask[rsu_idx, vehicle_idx] = 1
 
         state = np.concatenate(
-            [interrupt, channel_state, distance, coverage_matrix, request, storage]
+            [
+                x.flatten()
+                for x in [
+                    normalize_distance,  # N * 2
+                    normalized_vehicle_position,  # N * 1
+                    normalized_rsu_position,  # M * 1
+                    channel_state,  # N * 2
+                    request,  # N * (L + 1)
+                    storage,  # M * (L + 1)
+                ]
+            ]
         )
 
+        # create the action mask: vehicle can only connect to rsu that has the requested data
+
         self.state = torch.tensor(state, dtype=torch.float32).to(self.args.device)
+        self.mask = mask.to(self.args.device)
 
     @property
     def request(self):
