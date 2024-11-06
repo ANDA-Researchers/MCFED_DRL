@@ -11,7 +11,8 @@ import torch.optim as optim
 class ReplayMemory(object):
     def __init__(self, capacity):
         self.Transition = namedtuple(
-            "Transition", ("state", "action", "next_state", "reward")
+            "Transition",
+            ("state", "action", "next_state", "reward", "mask", "next_mask"),
         )
         self.memory = deque([], maxlen=capacity)
 
@@ -57,7 +58,7 @@ class BDQN(nn.Module):
             nn.ReLU(),
         )
 
-        self.actor_branches = nn.ModuleList(
+        self.advantage_branches = nn.ModuleList(
             [nn.Linear(hidden_dim, action_dim) for n in range(num_actions)]
         )
 
@@ -71,7 +72,9 @@ class BDQN(nn.Module):
     def forward(self, state, mask=None):
         out = self.common(state)
 
-        action_scores = [actor_branch(out) for actor_branch in self.actor_branches]
+        action_scores = [
+            advantage_branch(out) for advantage_branch in self.advantage_branches
+        ]
 
         if self.dueling:
             value = self.value_branch(out)
@@ -89,7 +92,9 @@ class BDQN(nn.Module):
 
         # TODO: Add the action masking here
         if mask is not None:
-            action_score *= mask
+            action_scores = [
+                score + mask[:, i, :] for i, score in enumerate(action_scores)
+            ]
 
         # TODO: Filter out out of bound actions
         pass
@@ -146,7 +151,7 @@ class BDQNAgent:
         self.memory = ReplayMemory(capacity)
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
 
-        self.steps = 0
+        self.steps = -1
 
     def act(self, state, mask=None):
         if random.random() > self.epsilon:
@@ -155,6 +160,8 @@ class BDQNAgent:
                 mask = mask.unsqueeze(0).to(self.device)
                 action_scores = self.policy_net(state, mask)
                 action = torch.stack([score.argmax() for score in action_scores])
+
+                # a = maxQ
         else:
             action = torch.tensor(
                 [random.randrange(self.action_dim) for _ in range(self.num_actions)],
@@ -176,33 +183,35 @@ class BDQNAgent:
         if len(self.memory) < self.batch_size:
             return
 
+        self.steps += 1
+
         self.policy_net.train()
         self.target_net.eval()
 
         # Sample a batch from the replay memory
         batch = self.memory.sample(self.batch_size)
 
-        states = torch.stack(batch.state).to(self.device)
-        actions = torch.stack(batch.action).to(self.device)
+        states = torch.cat(batch.state).to(self.device)
+        actions = torch.cat(batch.action).to(self.device)
         rewards = torch.tensor(batch.reward, dtype=torch.float32).to(self.device)
-        next_states = torch.stack(batch.next_state).to(self.device)
+        next_states = torch.cat(batch.next_state).to(self.device)
+        masks = torch.cat(batch.mask).to(self.device)
+        next_masks = torch.cat(batch.next_mask).to(self.device)
 
         # Q(s, a)
-        action_values = self.policy_net(states)
-        q_values = torch.cat(action_values, dim=1)
+        action_values = self.policy_net(states, masks)
+        q_values = torch.stack(action_values, dim=1)
 
         # Q(s', a')
-        next_acion_values = self.policy_net(next_states)
-        next_q_values = torch.cat(next_acion_values, dim=1)
+        next_acion_values = self.policy_net(next_states, next_masks)
+        next_q_values = torch.stack(next_acion_values, dim=1)
 
-        best_next_actions = torch.cat(
-            [q.max(dim=-1)[1] for q in next_acion_values], dim=1
-        )  # (batch_size, num_actions)
+        best_next_actions = next_q_values.argmax(dim=-1)
 
         # Q_target(s', argmax_a' Q(s', a'))
         with torch.no_grad():
-            target_next_action_values = self.target_net(next_states)
-            target_next_q_values = torch.cat(
+            target_next_action_values = self.target_net(next_states, next_masks)
+            target_next_q_values = torch.stack(
                 target_next_action_values, dim=1
             )  # batch_size, num_actions , action_dim
 
@@ -222,24 +231,21 @@ class BDQNAgent:
         actions = actions.squeeze()  # (batch_size, num_actions)
 
         # get the q_values for the actions taken, q_values is a tensors of shape (batch_size, num_actions, action_dim)
-        q_values_taken = q_values.gather(2, actions.unsqueeze(-1)).squeeze(-1)
+        q_values_taken = q_values.gather(1, actions.unsqueeze(-1)).squeeze(-1)
 
         # Calculate the loss
         loss = F.mse_loss(q_values_taken, target_q_values)
-
-        if self.logger is not None:
-            self.logger.add_scalar("Loss", loss.item(), self.steps)
 
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        self.steps += 1
-
         # Update the target network
         if self.steps % self.target_update == 0:
             self.update_target()
+
+        return loss.item()
 
     def update_target(self):
         """Update the target network with the weights from the policy network."""

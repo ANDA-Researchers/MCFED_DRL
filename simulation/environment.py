@@ -40,7 +40,7 @@ class Environment:
         self.mobility.step()
         self.channel.step(distance=self.distance)
         self.update_state()
-
+        pass
         return self.state, self.mask, reward
 
     def get_local_rsu_of_vehicle(self, vehicle):
@@ -196,13 +196,14 @@ class Environment:
 
         normalized_rsu_position = normalized_rsu_position * interrupt
 
-        mask = torch.ones(self.args.num_rsu, self.args.num_vehicle) * -1e9
+        mask = torch.ones(self.args.num_vehicle, self.args.num_rsu + 2) * -1e9
 
-        for vehicle_idx, rsu_idx in product(
-            range(self.args.num_vehicle), range(self.args.num_rsu)
-        ):
-            if self.rsu[rsu_idx].had(self.vehicle[vehicle_idx].request):
-                mask[rsu_idx, vehicle_idx] = 1
+        for vehicle_idx in range(self.args.num_vehicle):
+            mask[vehicle_idx][0] = 0
+            mask[vehicle_idx][self.args.num_rsu + 1] = 0
+            for rsu_idx in range(self.args.num_rsu):
+                if self.rsu[rsu_idx].had(self.request[vehicle_idx].nonzero()[0]):
+                    mask[vehicle_idx][rsu_idx] = 0
 
         state = np.concatenate(
             [

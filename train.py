@@ -1,15 +1,16 @@
+import datetime
+import os
+
 import torch
 from tqdm import tqdm
+
 from cache import random_cache
+from logger import *
 from module.bdqn import BDQNAgent
 from simulation import Environment
-import os
-import datetime
-from torch.utils.tensorboard import SummaryWriter
-
 from utils import load_args
 
-args = load_args()
+args, configs = load_args()
 
 
 def main():
@@ -21,7 +22,12 @@ def main():
         f"[{created_at}] {args.num_rsu}_{args.rsu_capacity}_{args.num_vehicle}",
     )
 
-    logger = SummaryWriter(log_dir=save_dir, flush_secs=1)
+    if args.logger == "wandb":
+        logger = WandbLogger(configs)
+    elif args.logger == "tensorboard":
+        logger = TensorboardLogger(save_dir)
+    else:
+        logger = None
 
     env = Environment(
         args=args,
@@ -53,7 +59,7 @@ def main():
         state, mask = env.reset()
 
         for step in tqdm(range(args.training_steps), leave=False, desc="Steps"):
-            action = agent.act(state)
+            action = agent.act(state, mask)
 
             _, _, reward = env.step(action)
 
@@ -66,10 +72,14 @@ def main():
                 action.unsqueeze(0).to("cpu"),
                 next_state.unsqueeze(0).to("cpu"),
                 reward.unsqueeze(0).to("cpu"),
+                mask.unsqueeze(0).to("cpu"),
+                next_mask.unsqueeze(0).to("cpu"),
             )
 
-            if step % 4 == 0:
-                agent.learn()
+            loss = agent.learn()
+
+            if agent.steps != -1:
+                agent.logger.log("Loss", loss, agent.steps)
 
             total_reward += reward
 
@@ -78,7 +88,7 @@ def main():
             state = next_state
             mask = next_mask
 
-        agent.logger.add_scalar("Reward", total_reward / args.training_steps, episode)
+        agent.logger.log("Reward", total_reward / args.training_steps, episode)
 
     # Save the model
     torch.save(agent.policy_net.state_dict(), os.path.join(save_dir, "model.pth"))

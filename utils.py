@@ -20,7 +20,7 @@ def average_weights(w):
 
 def load_args():
     with open("./configs/simulation.yml") as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)
+        configs = yaml.load(file, Loader=yaml.FullLoader)
 
-    args = type("args", (object,), config)()
-    return args
+    args = type("args", (object,), configs)()
+    return args, configs
