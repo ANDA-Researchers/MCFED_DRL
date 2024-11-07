@@ -160,8 +160,6 @@ class BDQNAgent:
                 mask = mask.unsqueeze(0).to(self.device)
                 action_scores = self.policy_net(state, mask)
                 action = torch.stack([score.argmax() for score in action_scores])
-
-                # a = maxQ
         else:
             action = torch.tensor(
                 [random.randrange(self.action_dim) for _ in range(self.num_actions)],
@@ -198,6 +196,8 @@ class BDQNAgent:
         masks = torch.cat(batch.mask).to(self.device)
         next_masks = torch.cat(batch.next_mask).to(self.device)
 
+        pass
+
         # Q(s, a)
         action_values = self.policy_net(states, masks)
         q_values = torch.stack(action_values, dim=1)
@@ -206,7 +206,8 @@ class BDQNAgent:
         next_acion_values = self.policy_net(next_states, next_masks)
         next_q_values = torch.stack(next_acion_values, dim=1)
 
-        best_next_actions = next_q_values.argmax(dim=-1)
+        # argmax_a' Q(s', a')
+        best_next_actions = next_q_values.max(-1)[1]
 
         # Q_target(s', argmax_a' Q(s', a'))
         with torch.no_grad():
@@ -231,7 +232,7 @@ class BDQNAgent:
         actions = actions.squeeze()  # (batch_size, num_actions)
 
         # get the q_values for the actions taken, q_values is a tensors of shape (batch_size, num_actions, action_dim)
-        q_values_taken = q_values.gather(1, actions.unsqueeze(-1)).squeeze(-1)
+        q_values_taken = q_values.gather(2, actions.unsqueeze(-1)).squeeze(-1)
 
         # Calculate the loss
         loss = F.mse_loss(q_values_taken, target_q_values)
