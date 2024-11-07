@@ -3,14 +3,14 @@ import wandb
 
 
 class WandbLogger:
-    def __init__(self, args):
+    def __init__(self, configs):
         self.logger = wandb.init(
             project="mcfed",
-            config=vars(args),
+            config=configs,
         )
 
     def log(self, metric, value, step):
-        wandb.log({metric: value}, step=step, commit=True)
+        wandb.log({metric: value}, commit=True)
 
 
 class TensorboardLogger:

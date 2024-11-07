@@ -12,7 +12,6 @@ from utils import load_args
 
 args, configs = load_args()
 
-
 def main():
 
     created_at = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
@@ -76,10 +75,11 @@ def main():
                 next_mask.unsqueeze(0).to("cpu"),
             )
 
-            loss = agent.learn()
+            if step % 4 == 0:
+                loss = agent.learn()
 
-            if agent.steps != -1:
-                agent.logger.log("Loss", loss, agent.steps)
+                if agent.steps != -1:
+                    agent.logger.log("Loss", loss, agent.steps)
 
             total_reward += reward
 

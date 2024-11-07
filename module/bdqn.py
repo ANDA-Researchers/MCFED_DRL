@@ -96,8 +96,8 @@ class BDQN(nn.Module):
                 score + mask[:, i, :] for i, score in enumerate(action_scores)
             ]
 
-        # TODO: Filter out out of bound actions
-        pass
+        # # TODO: Filter out out of bound actions
+        # pass
 
         return action_scores  # batch, num_actions, action_dim
 

@@ -1,5 +1,5 @@
 # Loggers
-logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
+logger: "wandb"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
 # Simulation settings
 num_rsu: 4  # Number of RSUs (Road Side Units)
 num_vehicle: 40  # Total number of vehicles in the simulation
@@ -15,13 +15,13 @@ std_velocity: 2.5  # Standard deviation of vehicle speed
 
 # Connection settings
 rsu_coverage: 1000  # Coverage area of each RSU in meters
-rsu_capacity: 2000  # Maximum capacity of RSUs
+rsu_capacity: 300  # Maximum capacity of RSUs
 cloud_rate: 100000000.0  # Cloud connection rate (100e6)
 fiber_rate: 150000000.0  # Fiber optic connection rate (150e6)
 max_connections: 10  # Maximum simultaneous connections
 
 # FL (Federated Learning) settings
-num_clusters: 2  # Number of clusters in FL
+num_clusters: 3  # Number of clusters in FL
 num_local_epochs: 100  # Number of local training epochs
 parallel_update: false  # Whether to use parallel updates or not
 
@@ -35,7 +35,7 @@ capacity: 10000  # Capacity for training
 hidden_dim: 512  # Hidden dimension for the neural network
 target_update: 500  # Frequency of target network updates
 training_steps: 3000  # Total training steps per episode
-epsilon_decay: 0.9995  # Decay rate for exploration
+epsilon_decay: 0.99995  # Decay rate for exploration
 epsilon_min: 0.01  # Minimum value for epsilon
 alpha: 1  # Alpha parameter for the algorithm
 beta: 1  # Beta parameter for the algorithm

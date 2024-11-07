@@ -5,3 +5,4 @@ data/*
 !data/emb.json
 TODO.txt
 logs
+wandb
