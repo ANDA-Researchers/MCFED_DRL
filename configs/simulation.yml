@@ -15,7 +15,7 @@ std_velocity: 2.5  # Standard deviation of vehicle speed
 
 # Connection settings
 rsu_coverage: 1000  # Coverage area of each RSU in meters
-rsu_capacity: 300  # Maximum capacity of RSUs
+rsu_capacity: 2000  # Maximum capacity of RSUs
 cloud_rate: 100000000.0  # Cloud connection rate (100e6)
 fiber_rate: 150000000.0  # Fiber optic connection rate (150e6)
 max_connections: 10  # Maximum simultaneous connections

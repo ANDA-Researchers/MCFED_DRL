@@ -69,7 +69,7 @@ class BDQN(nn.Module):
                 nn.Linear(hidden_dim, 1),
             )
 
-    def forward(self, state, mask=None):
+    def forward(self, state):
         out = self.common(state)
 
         action_scores = [
@@ -89,15 +89,6 @@ class BDQN(nn.Module):
                     value + (score - score.max(dim=-1, keepdim=True)[0])
                     for score in action_scores
                 ]
-
-        # TODO: Add the action masking here
-        if mask is not None:
-            action_scores = [
-                score + mask[:, i, :] for i, score in enumerate(action_scores)
-            ]
-
-        # # TODO: Filter out out of bound actions
-        # pass
 
         return action_scores  # batch, num_actions, action_dim
 
@@ -158,7 +149,7 @@ class BDQNAgent:
             with torch.no_grad():
                 state = state.unsqueeze(0).to(self.device)
                 mask = mask.unsqueeze(0).to(self.device)
-                action_scores = self.policy_net(state, mask)
+                action_scores = self.policy_net(state)
                 action = torch.stack([score.argmax() for score in action_scores])
         else:
             action = torch.tensor(
@@ -196,14 +187,12 @@ class BDQNAgent:
         masks = torch.cat(batch.mask).to(self.device)
         next_masks = torch.cat(batch.next_mask).to(self.device)
 
-        pass
-
         # Q(s, a)
-        action_values = self.policy_net(states, masks)
+        action_values = self.policy_net(states)
         q_values = torch.stack(action_values, dim=1)
 
         # Q(s', a')
-        next_acion_values = self.policy_net(next_states, next_masks)
+        next_acion_values = self.policy_net(next_states)
         next_q_values = torch.stack(next_acion_values, dim=1)
 
         # argmax_a' Q(s', a')
@@ -211,10 +200,14 @@ class BDQNAgent:
 
         # Q_target(s', argmax_a' Q(s', a'))
         with torch.no_grad():
-            target_next_action_values = self.target_net(next_states, next_masks)
+            target_next_action_values = self.target_net(next_states)
             target_next_q_values = torch.stack(
                 target_next_action_values, dim=1
             )  # batch_size, num_actions , action_dim
+
+            # apply the mask to the target_next_q_values
+
+            target_next_q_values += next_masks
 
             target_next_q_values = target_next_q_values.gather(
                 2, best_next_actions.unsqueeze(-1)
@@ -226,10 +219,6 @@ class BDQNAgent:
             )  # Shape: (batch_size, 1)
 
             target_q_values = target_q_values.repeat(1, self.num_actions)
-
-        # Gather the Q-values for the actions taken from q_values
-
-        actions = actions.squeeze()  # (batch_size, num_actions)
 
         # get the q_values for the actions taken, q_values is a tensors of shape (batch_size, num_actions, action_dim)
         q_values_taken = q_values.gather(2, actions.unsqueeze(-1)).squeeze(-1)

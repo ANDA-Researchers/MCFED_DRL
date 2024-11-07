@@ -12,6 +12,7 @@ from utils import load_args
 
 args, configs = load_args()
 
+
 def main():
 
     created_at = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
@@ -92,7 +93,6 @@ def main():
 
     # Save the model
     torch.save(agent.policy_net.state_dict(), os.path.join(save_dir, "model.pth"))
-    logger.close()
 
 
 if __name__ == "__main__":
