@@ -3,7 +3,8 @@ import numpy as np
 
 class V2X:
     def __init__(self, args=None) -> None:
-        self.B_sub = 1e6  # 540 kHz
+        self.B_sub = 1e6  # 1 MHz
+        self.B_bs = 540e3  # 540 kHz
         self.P_bs = 43
         self.P_rsu = 30
         self.sigma2 = -114
@@ -108,7 +109,7 @@ class V2X:
         )
 
         data_rate_bs = self.B_sub * np.log2(1 + channel_gain_bs / self.noise_power)
-        data_rate_rsu = self.B_sub * np.log2(1 + channel_gain_rsu / self.noise_power)
+        data_rate_rsu = self.B_bs * np.log2(1 + channel_gain_rsu / self.noise_power)
 
         self.data_rate = np.concatenate(
             [data_rate_bs.reshape(1, -1), data_rate_rsu.reshape(1, -1)], axis=0

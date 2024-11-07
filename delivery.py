@@ -12,7 +12,7 @@ def greedy_delivery(env):
     requested_data = env.mobility.request[requested_vehicles].nonzero()[1]
 
     for v, r in zip(requested_vehicles, requested_data):
-        a = env.num_rsu + 1  # default to the cloud
+        a = env.args.num_rsu + 1  # default to the cloud
         for rsu_idx, rsu in enumerate(env.rsu):
             if rsu.had(r):
                 a = rsu_idx + 1

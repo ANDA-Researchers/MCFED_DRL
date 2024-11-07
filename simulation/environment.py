@@ -23,7 +23,9 @@ class Environment:
 
     def step(self, action):
         action = action.cpu().numpy()
-        avg_delay, hit_ratio, success_ratio = self.compute_delay(action)
+        avg_delay, total_request, total_hits, total_success = self.compute_delay(action)
+        hit_ratio = total_hits / total_request
+        success_ratio = total_success / total_request
 
         reward = (
             torch.tensor(
@@ -39,7 +41,12 @@ class Environment:
         self.mobility.step()
         self.channel.step(distance=self.distance)
         self.update_state()
-        return self.state, self.mask, reward
+        return (
+            self.state,
+            self.mask,
+            reward,
+            (avg_delay, total_request, total_hits, total_success),
+        )
 
     def get_local_rsu_of_vehicle(self, vehicle):
         return self.mobility.reverse_coverage[vehicle]
@@ -69,12 +76,12 @@ class Environment:
         for vehicle_idx in request_vehicles:
 
             # get the data rate of the vehicle
-            bs_rate = self.channel.data_rate[0][vehicle_idx]
+            bs_rate = max(self.channel.data_rate[0][vehicle_idx], 4e6)
             rsu_rate = self.channel.data_rate[1][vehicle_idx]
 
             # compute the delay for the vehicle
             rsu_delay = self.args.content_size / rsu_rate
-            bs_delay = self.args.content_size / 2e6
+            bs_delay = self.args.content_size / bs_rate
             fiber_delay = self.args.content_size / self.args.fiber_rate
             backhaul_delay = self.args.content_size / self.args.cloud_rate
 
@@ -133,7 +140,7 @@ class Environment:
         hit_ratio = total_hits / total_request
         success_ratio = total_success / total_request
 
-        return avg_delay, hit_ratio, success_ratio
+        return avg_delay, total_request, total_hits, total_success
 
     @property
     def vehicle(self):

@@ -1,4 +1,6 @@
 import copy
+import json
+import os
 
 import numpy as np
 import torch
@@ -24,3 +26,11 @@ def load_args():
 
     args = type("args", (object,), configs)()
     return args, configs
+
+
+def save_results(save_dir, cache, delivery, results):
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    with open(os.path.join(save_dir, "results.json"), "w") as f:
+        json.dump(results, f)

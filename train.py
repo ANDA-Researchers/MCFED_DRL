@@ -61,7 +61,7 @@ def main():
         for step in tqdm(range(args.training_steps), leave=False, desc="Steps"):
             action = agent.act(state, mask)
 
-            _, _, reward = env.step(action)
+            _, _, reward, _ = env.step(action)
 
             random_cache(env)
 
