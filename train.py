@@ -76,7 +76,7 @@ def main():
                 next_mask.unsqueeze(0).to("cpu"),
             )
 
-            if step % 4 == 0:
+            if step % args.train_every == 0:
                 loss = agent.learn()
 
                 if agent.steps != -1:
