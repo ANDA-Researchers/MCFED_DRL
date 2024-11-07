@@ -1,85 +1,29 @@
 import numpy as np
-from utils import restrict_connections
+import torch
 
 
-class CloudDelivery:
-    def __init__(self, args):
-        self.args = args
-
-    def select_action(self, env):
-        actions = np.zeros(self.args.num_vehicles)
-        for idx in env.request:
-            actions[idx] = self.args.num_rsu + 1
-
-        # restrict the number of connections
-        actions = restrict_connections(actions, self.args.max_connections)
-
-        return actions
-
-class NoCooperationDelivery:
-    def __init__(self, args):
-        self.args = args
-
-    def select_action(self, env):
-        actions = np.zeros(self.args.num_vehicles)
-        for idx in env.request:
-            requested_content = env.vehicles[idx].request
-            all_rsus = env.rsus
-            local_rsu_idx = env.reverse_coverage[idx]
-            local_rsu = all_rsus[local_rsu_idx]
-
-            if requested_content in local_rsu.cache:
-                actions[idx] = local_rsu_idx + 1
-            else:
-                actions[idx] = self.args.num_rsu + 1
-                
-        # restrict the number of connections
-        actions = restrict_connections(actions, self.args.max_connections)
-
-        return actions
+def random_delivery(env):
+    return torch.randint(0, 2, (env.args.num_vehicle,))
 
 
-class RandomDelivery:
-    def __init__(self, args):
-        self.args = args
+def greedy_delivery(env):
+    action = []
+    requested_vehicles = env.mobility.request.nonzero()[0]
+    requested_data = env.mobility.request[requested_vehicles].nonzero()[1]
 
-    def select_action(self, env):
-        actions = np.zeros(self.args.num_vehicles)
+    for v, r in zip(requested_vehicles, requested_data):
+        a = env.num_rsu + 1  # default to the cloud
+        for rsu_idx, rsu in enumerate(env.rsu):
+            if rsu.had(r):
+                a = rsu_idx + 1
+                if rsu_idx == env.get_local_rsu_of_vehicle(v):
+                    break
+        action.append(a)
 
-        for idx in env.request:
-            actions[idx] = np.random.randint(0, self.args.num_rsu + 2)
-
-        # restrict the number of connections
-        actions = restrict_connections(actions, self.args.max_connections)
-
-        return actions
+    return torch.tensor(action)
 
 
-class GreedyDelivery:
-    def __init__(self, args):
-        self.args = args
-
-    def select_action(self, env):
-        actions = np.zeros(self.args.num_vehicles)
-        for idx in env.request:
-            requested_content = env.vehicles[idx].request
-            all_rsus = env.rsus
-            local_rsu_idx = env.reverse_coverage[idx]
-            local_rsu = all_rsus[local_rsu_idx]
-            neighbor_rsus = [
-                (rsu, idx) for idx, rsu in enumerate(all_rsus) if idx != local_rsu
-            ]
-
-            if requested_content in local_rsu.cache:
-                actions[idx] = local_rsu_idx + 1
-            else:
-                actions[idx] = self.args.num_rsu + 1
-                for rsu, idx in neighbor_rsus:
-                    if requested_content in rsu.cache:
-                        actions[idx] = idx + 1
-                        break
-
-        # restrict the number of connections
-        actions = restrict_connections(actions, self.args.max_connections)
-
-        return actions
+def nocache_delivery(env):
+    return torch.zeros(
+        env.args.num_vehicle,
+    )

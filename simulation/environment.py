@@ -19,7 +19,6 @@ class Environment:
         self.mobility.reset()
         self.channel.reset(distance=self.distance)
         self.update_state()
-
         return self.state, self.mask
 
     def step(self, action):
@@ -40,7 +39,6 @@ class Environment:
         self.mobility.step()
         self.channel.step(distance=self.distance)
         self.update_state()
-        pass
         return self.state, self.mask, reward
 
     def get_local_rsu_of_vehicle(self, vehicle):

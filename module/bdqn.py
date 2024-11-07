@@ -9,20 +9,51 @@ import torch.optim as optim
 
 
 class ReplayMemory(object):
-    def __init__(self, capacity):
+    def __init__(self, capacity, alpha=0.6):
         self.Transition = namedtuple(
             "Transition",
             ("state", "action", "next_state", "reward", "mask", "next_mask"),
         )
         self.memory = deque([], maxlen=capacity)
+        self.priorities = deque([], maxlen=capacity)
+        self.alpha = (
+            alpha  # Controls the level of prioritization (0 means no prioritization)
+        )
 
     def push(self, *args):
-        """Save a transition"""
+        """Save a transition with the maximum priority."""
+        max_priority = max(
+            list(self.priorities), default=1.0
+        )  # Ensure non-zero initial priority
         self.memory.append(self.Transition(*args))
+        self.priorities.append(max_priority)
 
-    def sample(self, batch_size):
-        transitions = random.sample(self.memory, batch_size)
-        return self.Transition(*zip(*transitions))
+    def sample(self, batch_size, beta=0.4):
+        """Sample a batch of transitions based on priorities."""
+        if len(self.memory) == 0:
+            raise ValueError("Memory is empty")
+
+        # Calculate sampling probabilities proportional to priorities
+        scaled_priorities = np.array(self.priorities) ** self.alpha
+        sampling_probabilities = scaled_priorities / scaled_priorities.sum()
+
+        # Sample indices based on the calculated probabilities
+        indices = np.random.choice(
+            len(self.memory), batch_size, p=sampling_probabilities
+        )
+        transitions = [self.memory[idx] for idx in indices]
+
+        # Calculate importance-sampling weights
+        total = len(self.memory)
+        weights = (total * sampling_probabilities[indices]) ** (-beta)
+        weights /= weights.max()  # Normalize for stability
+
+        return self.Transition(*zip(*transitions)), indices, weights
+
+    def update_priorities(self, indices, priorities):
+        """Update the priorities of sampled transitions."""
+        for idx, priority in zip(indices, priorities):
+            self.priorities[idx] = priority
 
     def __len__(self):
         return len(self.memory)
@@ -178,7 +209,7 @@ class BDQNAgent:
         self.target_net.eval()
 
         # Sample a batch from the replay memory
-        batch = self.memory.sample(self.batch_size)
+        batch, indices, weights = self.memory.sample(self.batch_size)
 
         states = torch.cat(batch.state).to(self.device)
         actions = torch.cat(batch.action).to(self.device)
@@ -225,6 +256,10 @@ class BDQNAgent:
 
         # Calculate the loss
         loss = F.mse_loss(q_values_taken, target_q_values)
+
+        new_priorities = abs(q_values_taken - target_q_values).detach().cpu().numpy()
+        new_priorities = np.sum(new_priorities, axis=1)
+        self.memory.update_priorities(indices, new_priorities)
 
         # Optimize the model
         self.optimizer.zero_grad()

@@ -1,3 +1,7 @@
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
