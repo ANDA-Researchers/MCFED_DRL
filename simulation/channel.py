@@ -108,8 +108,8 @@ class V2X:
             [channel_gain_bs.reshape(1, -1), channel_gain_rsu.reshape(1, -1)], axis=0
         )
 
-        data_rate_bs = self.B_sub * np.log2(1 + channel_gain_bs / self.noise_power)
-        data_rate_rsu = self.B_bs * np.log2(1 + channel_gain_rsu / self.noise_power)
+        data_rate_bs = self.B_bs * np.log2(1 + channel_gain_bs / self.noise_power)
+        data_rate_rsu = self.B_sub * np.log2(1 + channel_gain_rsu / self.noise_power)
 
         self.data_rate = np.concatenate(
             [data_rate_bs.reshape(1, -1), data_rate_rsu.reshape(1, -1)], axis=0

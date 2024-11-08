@@ -100,6 +100,15 @@ class BDQN(nn.Module):
                 nn.Linear(hidden_dim, 1),
             )
 
+    def _register_gradient_rescaling_hook(self):
+        def rescale_gradients(module, grad_input, grad_output):
+            scale_factor = 1.0 / (self.num_actions + 1)
+            return tuple(
+                gi * scale_factor if gi is not None else None for gi in grad_input
+            )
+
+        self.common.register_backward_hook(rescale_gradients)
+
     def forward(self, state):
         out = self.common(state)
 
