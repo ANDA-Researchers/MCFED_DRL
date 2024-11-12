@@ -16,7 +16,7 @@ std_velocity: 2.5  # Standard deviation of vehicle speed
 # Connection settings
 rsu_coverage: 1000  # Coverage area of each RSU in meters
 rsu_capacity: 3000  # Maximum capacity of RSUs
-cloud_rate: 100000000.0  # Cloud connection rate (100e6)
+cloud_rate: 10000000.0  # Cloud connection rate (100e6)
 fiber_rate: 150000000.0  # Fiber optic connection rate (150e6)
 max_connections: 10  # Maximum simultaneous connections
 
@@ -28,9 +28,9 @@ parallel_update: false  # Whether to use parallel updates or not
 # DRL (Deep Reinforcement Learning) settings
 episodes: 100  # Number of episodes to run
 device: "cuda"  # Device to use for training (e.g., 'cuda' or 'cpu')
-train_every: 4 # Frequency of training the agent
+train_every: 1 # Frequency of training the agent
 batch_size: 32  # Size of training batches
-gamma: 0.99  # Discount factor for future rewards
+gamma: 0.9  # Discount factor for future rewards
 lr: 0.001  # Learning rate
 capacity: 10000  # Capacity for training
 hidden_dim: 512  # Hidden dimension for the neural network
@@ -38,6 +38,6 @@ target_update: 500  # Frequency of target network updates
 training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99995  # Decay rate for exploration
 epsilon_min: 0.01  # Minimum value for epsilon
-alpha: 1  # Alpha parameter for the algorithm
+alpha: 10  # Alpha parameter for the algorithm
 beta: 0  # Beta parameter for the algorithm
 mu: 0  # Mu parameter for the algorithm
