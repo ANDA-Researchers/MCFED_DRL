@@ -76,8 +76,8 @@ class Environment:
         for vehicle_idx in request_vehicles:
 
             # get the data rate of the vehicle
-            bs_rate = self.channel.data_rate[0][vehicle_idx]
-            rsu_rate = self.channel.data_rate[1][vehicle_idx]
+            bs_rate = self.channel.data_rate[vehicle_idx][0]
+            rsu_rate = self.channel.data_rate[vehicle_idx][1]
 
             # compute the delay for the vehicle
             rsu_delay = self.args.content_size / rsu_rate

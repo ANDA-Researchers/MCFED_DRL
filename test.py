@@ -1,28 +1,45 @@
-import wandb
-import random
+import datetime
+import os
 
-# start a new wandb run to track this script
-wandb.init(
-    # set the wandb project where this run will be logged
-    project="my-awesome-project",
-    # track hyperparameters and run metadata
-    config={
-        "learning_rate": 0.02,
-        "architecture": "CNN",
-        "dataset": "CIFAR-100",
-        "epochs": 10,
-    },
-)
+from tqdm import tqdm
 
-# simulate training
-epochs = 10
-offset = random.random() / 5
-for epoch in range(2, epochs):
-    acc = 1 - 2**-epoch - random.random() / epoch - offset
-    loss = 2**-epoch + random.random() / epoch + offset
+from simulation import Environment
+from delivery import random_delivery
+from utils import load_args, save_results
 
-    # log metrics to wandb
-    wandb.log({"acc": acc, "loss": loss})
+args, configs = load_args()
 
-# [optional] finish the wandb run, necessary in notebooks
-wandb.finish()
+
+def main():
+    env = Environment(
+        args=args,
+    )
+
+    state, mask = env.reset()
+    for round in range(args.num_rounds):
+        print(f"Round: {round}")
+        for step in tqdm(range(args.time_step_per_round)):
+            action = random_delivery(env)
+
+            for vehicle_idx in range(args.num_vehicle):
+                print("=================")
+                print(
+                    "d from BS: {:.2f}, h: {:.10f}, V2N datarate: {:.2f}".format(
+                        env.mobility.distance[vehicle_idx, 0],
+                        env.channel.channel_gain[vehicle_idx, 0],
+                        env.channel.data_rate[vehicle_idx, 0],
+                    )
+                )
+                print(
+                    "d from RSU: {:.2f}, h: {:.10f}, V2I datarate: {:.2f}".format(
+                        env.mobility.distance[vehicle_idx, 1],
+                        env.channel.channel_gain[vehicle_idx, 1],
+                        env.channel.data_rate[vehicle_idx, 1],
+                    )
+                )
+
+            _, _, reward, logs = env.step(action)
+
+
+if __name__ == "__main__":
+    main()

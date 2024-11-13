@@ -89,6 +89,10 @@ class BDQN(nn.Module):
             nn.ReLU(),
         )
 
+        for layer in self.common:
+            if isinstance(layer, nn.Linear):
+                layer.register_full_backward_hook(self._backward_hook)
+
         self.advantage_branches = nn.ModuleList(
             [nn.Linear(hidden_dim, action_dim) for n in range(num_actions)]
         )
@@ -100,14 +104,13 @@ class BDQN(nn.Module):
                 nn.Linear(hidden_dim, 1),
             )
 
-    # def _register_gradient_rescaling_hook(self):
-    #     def rescale_gradients(module, grad_input, grad_output):
-    #         scale_factor = 1.0 / (self.num_actions + 1)
-    #         return tuple(
-    #             gi * scale_factor if gi is not None else None for gi in grad_input
-    #         )
+    def _backward_hook(self, module, grad_input, grad_output):
+        scale_factor = 1 / self.num_actions
 
-    #     self.common.register_backward_hook(rescale_gradients)
+        scaled_grad_input = tuple(
+            grad * scale_factor if grad is not None else None for grad in grad_input
+        )
+        return scaled_grad_input
 
     def forward(self, state):
         out = self.common(state)
