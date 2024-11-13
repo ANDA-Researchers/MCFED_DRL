@@ -28,23 +28,27 @@ class Vehicle:
     def __init__(
         self, position: tuple, velocity: float, data: dict, model, device, local_epochs
     ) -> None:
+        train = True
         self.position = position
         self.velocity = velocity
         self.data = data
-        self.model = model
-        self.local_epochs = local_epochs
-        self.device = device
+        if not train:
+            self.model = model
+            self.local_epochs = local_epochs
+            self.device = device
+            self.model = model.to(self.device)
 
-        self.model = model.to(self.device)
+            (
+                self.train_cosine,
+                self.train_semantic,
+                self.train_labels,
+                self.train_ids,
+            ) = self.data["train"]
+            self.test_cosine, self.test_semantic, self.test_labels, self.test_ids = (
+                self.data["test"]
+            )
 
         self.user_info = data["user_info"]
-
-        self.train_cosine, self.train_semantic, self.train_labels, self.train_ids = (
-            self.data["train"]
-        )
-        self.test_cosine, self.test_semantic, self.test_labels, self.test_ids = (
-            self.data["test"]
-        )
         self.uid = self.data["uid"]
 
         self.movies = self.data["movies"]
