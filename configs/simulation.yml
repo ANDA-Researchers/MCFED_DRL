@@ -31,7 +31,7 @@ device: "cuda"  # Device to use for training (e.g., 'cuda' or 'cpu')
 train_every: 10 # Frequency of training the agent
 batch_size: 128  # Size of training batches
 gamma: 0.9  # Discount factor for future rewards
-lr: 0.001  # Learning rate
+lr: 1  # Learning rate
 capacity: 10000  # Capacity for training
 hidden_dim: 512  # Hidden dimension for the neural network
 target_update: 500  # Frequency of target network updates

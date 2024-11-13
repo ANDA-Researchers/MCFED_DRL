@@ -250,7 +250,7 @@ class BDQNAgent:
 
             # apply the mask to the target_next_q_values
 
-            target_next_q_values += next_masks * -1000
+            target_next_q_values += next_masks * -100
 
             target_next_q_values = target_next_q_values.gather(
                 2, best_next_actions.unsqueeze(-1)

@@ -47,13 +47,12 @@ class Vehicle:
             self.test_cosine, self.test_semantic, self.test_labels, self.test_ids = (
                 self.data["test"]
             )
+            a = self.get_flatten_weights()
 
         self.user_info = data["user_info"]
         self.uid = self.data["uid"]
 
         self.movies = self.data["movies"]
-
-        a = self.get_flatten_weights()
 
     def update_velocity(self, velocity: float) -> None:
         self.velocity = velocity
