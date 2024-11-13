@@ -205,10 +205,11 @@ class Environment:
 
         for vehicle_idx in range(self.args.num_vehicle):
             mask[vehicle_idx][0] = 0
-            mask[vehicle_idx][self.args.num_rsu + 1] = 0
+            # mask[vehicle_idx][self.args.num_rsu + 1] = 0
             for rsu_idx in range(self.args.num_rsu):
-                if self.rsu[rsu_idx].had(self.request[vehicle_idx].nonzero()[0]):
-                    mask[vehicle_idx][rsu_idx] = 0
+                if not self.rsu[rsu_idx].is_interrupt():
+                    if self.rsu[rsu_idx].had(self.request[vehicle_idx].nonzero()[0]):
+                        mask[vehicle_idx][rsu_idx + 1] = 1
 
         state = np.concatenate(
             [

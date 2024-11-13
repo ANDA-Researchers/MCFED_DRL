@@ -28,16 +28,17 @@ parallel_update: false  # Whether to use parallel updates or not
 # DRL (Deep Reinforcement Learning) settings
 episodes: 100  # Number of episodes to run
 device: "cuda"  # Device to use for training (e.g., 'cuda' or 'cpu')
-train_every: 10 # Frequency of training the agent
-batch_size: 128  # Size of training batches
-gamma: 0.9  # Discount factor for future rewards
-lr: 1  # Learning rate
+train_every: 4 # Frequency of training the agent
+batch_size: 32  # Size of training batches
+mini_batch: 32  # Size of mini-batches
+gamma: 1  # Discount factor for future rewards
+lr: 0.01  # Learning rate
 capacity: 10000  # Capacity for training
-hidden_dim: 512  # Hidden dimension for the neural network
-target_update: 500  # Frequency of target network updates
+hidden_dim: 128  # Hidden dimension for the neural network
+target_update: 1000  # Frequency of target network updates
 training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99995  # Decay rate for exploration
-epsilon_min: 0.01  # Minimum value for epsilon
+epsilon_min: 0.01 # Minimum value for epsilon
 alpha: 1  # Alpha parameter for the algorithm
 beta: 0  # Beta parameter for the algorithm
 mu: 0  # Mu parameter for the algorithm

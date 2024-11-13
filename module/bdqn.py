@@ -147,6 +147,7 @@ class BDQNAgent:
         lr=1e-3,
         capacity=10000,
         batch_size=64,
+        mini_batch=1,
         target_update=10,
         epsilon_decay=0.995,
         epsilon_min=0.01,
@@ -171,6 +172,7 @@ class BDQNAgent:
         self.logger = logger
         self.dueling = dueling
         self.reduce = reduce
+        self.mini_batch = mini_batch
 
         self.policy_net = BDQN(
             state_dim, num_actions, action_dim, hidden_dim, dueling, reduce
@@ -183,7 +185,7 @@ class BDQNAgent:
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.memory = ReplayMemory(capacity)
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
+        self.optimizer = optim.SGD(self.policy_net.parameters(), lr=lr)
 
         self.steps = -1
 
@@ -249,8 +251,7 @@ class BDQNAgent:
             )  # batch_size, num_actions , action_dim
 
             # apply the mask to the target_next_q_values
-
-            target_next_q_values += next_masks * -100
+            target_next_q_values += next_masks * -1e9
 
             target_next_q_values = target_next_q_values.gather(
                 2, best_next_actions.unsqueeze(-1)
@@ -276,6 +277,8 @@ class BDQNAgent:
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
+        for param in self.policy_net.parameters():
+            param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
         # Update the target network

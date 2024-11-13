@@ -19,7 +19,7 @@ def main():
     )
 
     cache = "random"
-    delivery = "greedy"
+    delivery = "random"
 
     delay_tracking = []
     global_total_request = 0
@@ -45,7 +45,6 @@ def main():
             elif delivery == "nocache":
                 action = nocache_delivery(env)
 
-            print(action)
             _, _, reward, logs = env.step(action)
 
             avg_delay, total_request, total_hits, total_success = logs

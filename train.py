@@ -42,6 +42,7 @@ def main():
         lr=args.lr,
         capacity=args.capacity,
         batch_size=args.batch_size,
+        mini_batch=args.mini_batch,
         target_update=args.target_update,
         epsilon_decay=args.epsilon_decay,
         epsilon_min=args.epsilon_min,
@@ -60,6 +61,8 @@ def main():
 
         for step in tqdm(range(args.training_steps), leave=False, desc="Steps"):
             action = agent.act(state, mask)
+
+            agent.logger.log("Epsilon", agent.epsilon, agent.steps)
 
             _, _, reward, _ = env.step(action)
 
@@ -90,6 +93,13 @@ def main():
             mask = next_mask
 
         agent.logger.log("Reward", total_reward / args.training_steps, episode)
+
+        # save model
+        if episode % 5 == 0:
+            torch.save(
+                agent.policy_net.state_dict(),
+                os.path.join(save_dir, "model_{}.pth".format(episode)),
+            )
 
     # Save the model
     torch.save(agent.policy_net.state_dict(), os.path.join(save_dir, "model.pth"))
