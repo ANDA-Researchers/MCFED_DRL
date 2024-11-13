@@ -201,7 +201,7 @@ class Environment:
 
         normalized_rsu_position = normalized_rsu_position * interrupt
 
-        mask = torch.ones(self.args.num_vehicle, self.args.num_rsu + 2) * -10
+        mask = torch.ones(self.args.num_vehicle, self.args.num_rsu + 2)
 
         for vehicle_idx in range(self.args.num_vehicle):
             mask[vehicle_idx][0] = 0
