@@ -3,7 +3,7 @@ import torch
 
 
 def random_delivery(env):
-    return torch.randint(0, 2, (env.args.num_vehicle,))
+    return torch.randint(0, env.args.num_rsu + 2, (env.args.num_vehicle,))
 
 
 def greedy_delivery(env):

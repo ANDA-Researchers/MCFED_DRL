@@ -9,10 +9,34 @@ import torch.optim as optim
 
 
 class ReplayMemory(object):
+    def __init__(self, capacity):
+        self.Transition = namedtuple(
+            "Transition",
+            ("state", "action", "next_state", "reward"),
+        )
+        self.memory = deque([], maxlen=capacity)
+
+    def push(self, *args):
+        """Save a transition."""
+        self.memory.append(self.Transition(*args))
+
+    def sample(self, batch_size):
+        """Sample a batch of transitions."""
+        if len(self.memory) == 0:
+            raise ValueError("Memory is empty")
+
+        transitions = random.sample(self.memory, batch_size)
+        return self.Transition(*zip(*transitions))
+
+    def __len__(self):
+        return len(self.memory)
+
+
+class PrioritizedReplayMemory(object):
     def __init__(self, capacity, alpha=0.6):
         self.Transition = namedtuple(
             "Transition",
-            ("state", "action", "next_state", "reward", "mask", "next_mask"),
+            ("state", "action", "next_state", "reward"),
         )
         self.memory = deque([], maxlen=capacity)
         self.priorities = deque([], maxlen=capacity)
@@ -173,6 +197,7 @@ class BDQNAgent:
         self.dueling = dueling
         self.reduce = reduce
         self.mini_batch = mini_batch
+        self.prioritized = False
 
         self.policy_net = BDQN(
             state_dim, num_actions, action_dim, hidden_dim, dueling, reduce
@@ -184,16 +209,19 @@ class BDQNAgent:
 
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
-        self.memory = ReplayMemory(capacity)
-        self.optimizer = optim.SGD(self.policy_net.parameters(), lr=lr)
+        self.memory = (
+            ReplayMemory(capacity)
+            if not self.prioritized
+            else PrioritizedReplayMemory(capacity)
+        )
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
 
         self.steps = -1
 
-    def act(self, state, mask=None):
-        if random.random() > self.epsilon:
+    def act(self, state, inference=False):
+        if random.random() > self.epsilon or inference:
             with torch.no_grad():
                 state = state.unsqueeze(0).to(self.device)
-                mask = mask.unsqueeze(0).to(self.device)
                 action_scores = self.policy_net(state)
                 action = torch.stack([score.argmax() for score in action_scores])
         else:
@@ -207,12 +235,6 @@ class BDQNAgent:
 
         return action
 
-    def action_mask(self, state, mask):
-        if random.random() > self.epsilon:
-            with torch.no_grad():
-                state = state.unsqueeze(0).to(self.device)
-                action_scores = self.policy_net(state)
-
     def learn(self):
         if len(self.memory) < self.batch_size:
             return
@@ -223,14 +245,15 @@ class BDQNAgent:
         self.target_net.eval()
 
         # Sample a batch from the replay memory
-        batch, indices, weights = self.memory.sample(self.batch_size)
+        if self.prioritized:
+            batch, indices, weights = self.memory.sample(self.batch_size)
+        else:
+            batch = self.memory.sample(self.batch_size)
 
         states = torch.cat(batch.state).to(self.device)
         actions = torch.cat(batch.action).to(self.device)
         rewards = torch.tensor(batch.reward, dtype=torch.float32).to(self.device)
         next_states = torch.cat(batch.next_state).to(self.device)
-        masks = torch.cat(batch.mask).to(self.device)
-        next_masks = torch.cat(batch.next_mask).to(self.device)
 
         # Q(s, a)
         action_values = self.policy_net(states)
@@ -241,7 +264,7 @@ class BDQNAgent:
         next_q_values = torch.stack(next_acion_values, dim=1)
 
         # argmax_a' Q(s', a')
-        best_next_actions = next_q_values.max(-1)[1]
+        best_next_actions = next_q_values.argmax(dim=-1)
 
         # Q_target(s', argmax_a' Q(s', a'))
         with torch.no_grad():
@@ -249,9 +272,6 @@ class BDQNAgent:
             target_next_q_values = torch.stack(
                 target_next_action_values, dim=1
             )  # batch_size, num_actions , action_dim
-
-            # apply the mask to the target_next_q_values
-            target_next_q_values += next_masks * -1e9
 
             target_next_q_values = target_next_q_values.gather(
                 2, best_next_actions.unsqueeze(-1)
@@ -270,9 +290,13 @@ class BDQNAgent:
         # Calculate the loss
         loss = F.mse_loss(q_values_taken, target_q_values)
 
-        new_priorities = abs(q_values_taken - target_q_values).detach().cpu().numpy()
-        new_priorities = np.sum(new_priorities, axis=1)
-        self.memory.update_priorities(indices, new_priorities)
+        # Update the priorities
+        if self.prioritized:
+            new_priorities = (
+                abs(q_values_taken - target_q_values).detach().cpu().numpy()
+            )
+            new_priorities = np.sum(new_priorities, axis=1)
+            self.memory.update_priorities(indices, new_priorities)
 
         # Optimize the model
         self.optimizer.zero_grad()

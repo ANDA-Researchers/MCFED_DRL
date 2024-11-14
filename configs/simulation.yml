@@ -1,8 +1,8 @@
 # Loggers
 logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
 # Simulation settings
-num_rsu: 4  # Number of RSUs (Road Side Units)
-num_vehicle: 40  # Total number of vehicles in the simulation
+num_rsu: 3  # Number of RSUs (Road Side Units)
+num_vehicle: 15  # Total number of vehicles in the simulation
 time_step_per_round: 10  # Duration of each round in time steps
 num_rounds: 30  # Total number of rounds for the simulation
 content_size: 4000000  # Size of content in bytes (4e6)
@@ -31,10 +31,10 @@ device: "cuda"  # Device to use for training (e.g., 'cuda' or 'cpu')
 train_every: 4 # Frequency of training the agent
 batch_size: 32  # Size of training batches
 mini_batch: 32  # Size of mini-batches
-gamma: 1  # Discount factor for future rewards
-lr: 0.01  # Learning rate
+gamma: 0.99  # Discount factor for future rewards
+lr: 0.001  # Learning rate
 capacity: 10000  # Capacity for training
-hidden_dim: 128  # Hidden dimension for the neural network
+hidden_dim: 512  # Hidden dimension for the neural network
 target_update: 1000  # Frequency of target network updates
 training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99995  # Decay rate for exploration

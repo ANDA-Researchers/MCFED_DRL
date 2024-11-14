@@ -19,7 +19,7 @@ class Environment:
         self.mobility.reset()
         self.channel.reset(distance=self.distance)
         self.update_state()
-        return self.state, self.mask
+        return self.state
 
     def step(self, action):
         action = action.cpu().numpy()
@@ -43,7 +43,6 @@ class Environment:
         self.update_state()
         return (
             self.state,
-            self.mask,
             reward,
             (avg_delay, total_request, total_hits, total_success),
         )
@@ -201,16 +200,6 @@ class Environment:
 
         normalized_rsu_position = normalized_rsu_position * interrupt
 
-        mask = torch.ones(self.args.num_vehicle, self.args.num_rsu + 2)
-
-        for vehicle_idx in range(self.args.num_vehicle):
-            mask[vehicle_idx][0] = 0
-            # mask[vehicle_idx][self.args.num_rsu + 1] = 0
-            for rsu_idx in range(self.args.num_rsu):
-                if not self.rsu[rsu_idx].is_interrupt():
-                    if self.rsu[rsu_idx].had(self.request[vehicle_idx].nonzero()[0]):
-                        mask[vehicle_idx][rsu_idx + 1] = 1
-
         state = np.concatenate(
             [
                 x.flatten()
@@ -225,10 +214,7 @@ class Environment:
             ]
         )
 
-        # create the action mask: vehicle can only connect to rsu that has the requested data
-
         self.state = torch.tensor(state, dtype=torch.float32).to(self.args.device)
-        self.mask = mask.to(self.args.device)
 
     @property
     def request(self):

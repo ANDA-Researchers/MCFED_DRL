@@ -15,7 +15,7 @@ def main():
         args=args,
     )
 
-    state, mask = env.reset()
+    state = env.reset()
     for round in range(args.num_rounds):
         print(f"Round: {round}")
         for step in tqdm(range(args.time_step_per_round)):
@@ -38,7 +38,7 @@ def main():
                     )
                 )
 
-            _, _, reward, logs = env.step(action)
+            _, reward, logs = env.step(action)
 
 
 if __name__ == "__main__":

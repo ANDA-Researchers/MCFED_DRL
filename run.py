@@ -1,14 +1,20 @@
 import datetime
 import os
 
+import torch
 from tqdm import tqdm
 
 from cache import avgfed, mcfed, random_cache
 from delivery import greedy_delivery, nocache_delivery, random_delivery
+from module.bdqn import BDQNAgent
 from simulation import Environment
 from utils import load_args, save_results
 
 args, configs = load_args()
+
+
+def load_weights(agent: BDQNAgent, path):
+    agent.policy_net.load_state_dict(torch.load(path))
 
 
 def main():
@@ -18,15 +24,36 @@ def main():
         args=args,
     )
 
+    agent = BDQNAgent(
+        state_dim=env.state_dim,
+        num_actions=args.num_vehicle,
+        action_dim=args.num_rsu + 2,
+        hidden_dim=args.hidden_dim,
+        gamma=args.gamma,
+        lr=args.lr,
+        capacity=args.capacity,
+        batch_size=args.batch_size,
+        mini_batch=args.mini_batch,
+        target_update=args.target_update,
+        epsilon_decay=args.epsilon_decay,
+        epsilon_min=args.epsilon_min,
+        device=args.device,
+        logger=None,
+        dueling=True,
+    )
+
+    # Load the weights
+    load_weights(agent, "P:\MCFED_DRL\logs\[20241114-123853] 3_100_15\model_15.pth")
+
     cache = "random"
-    delivery = "random"
+    delivery = "drl"
 
     delay_tracking = []
     global_total_request = 0
     global_total_hits = 0
     global_total_success = 0
 
-    state, mask = env.reset()
+    state = env.reset()
     for round in range(args.num_rounds):
         print(f"Round: {round}")
         # Put cache replacement policy here
@@ -44,8 +71,10 @@ def main():
                 action = greedy_delivery(env)
             elif delivery == "nocache":
                 action = nocache_delivery(env)
+            elif delivery == "drl":
+                action = agent.act(state, inference=True)
 
-            _, _, reward, logs = env.step(action)
+            _, reward, logs = env.step(action)
 
             avg_delay, total_request, total_hits, total_success = logs
 

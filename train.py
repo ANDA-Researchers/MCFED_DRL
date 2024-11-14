@@ -57,26 +57,24 @@ def main():
         print(f"Episode: {episode}")
 
         total_reward = 0
-        state, mask = env.reset()
+        state = env.reset()
 
         for step in tqdm(range(args.training_steps), leave=False, desc="Steps"):
-            action = agent.act(state, mask)
+            action = agent.act(state)
 
             agent.logger.log("Epsilon", agent.epsilon, agent.steps)
 
-            _, _, reward, _ = env.step(action)
+            _, reward, _ = env.step(action)
 
             random_cache(env)
 
-            next_state, next_mask = env.state, env.mask
+            next_state = env.state
 
             agent.memory.push(
                 state.unsqueeze(0).to("cpu"),
                 action.unsqueeze(0).to("cpu"),
                 next_state.unsqueeze(0).to("cpu"),
                 reward.unsqueeze(0).to("cpu"),
-                mask.unsqueeze(0).to("cpu"),
-                next_mask.unsqueeze(0).to("cpu"),
             )
 
             if step % args.train_every == 0:
@@ -90,7 +88,6 @@ def main():
             reward_tracking.append(reward)
 
             state = next_state
-            mask = next_mask
 
         agent.logger.log("Reward", total_reward / args.training_steps, episode)
 

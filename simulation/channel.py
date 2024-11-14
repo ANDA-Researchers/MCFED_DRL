@@ -3,18 +3,25 @@ import numpy as np
 
 class V2X:
     def __init__(self, args=None) -> None:
-        self.B_sub = 1e6  # 1 MHz
+        self.B_rsu = 1e6  # 1 MHz
         self.B_bs = 1e6  # 540 kHz
         self.P_bs = 43
         self.P_rsu = 30
         self.sigma2 = -114
+
         self.shadow_std_bs = 8
         self.shadow_std_rsu = 3
+
         self.decorrelation_distance_bs = 50
         self.decorrelation_distance_rsu = 25
 
-        self.h_bs = 15 - 1.5
+        self.h_bs = 25 - 1.5
         self.h_rsu = 5 - 1.5
+
+        self.noise_figure = 5
+        self.bs_attena_gain = 8
+        self.rsu_attena_gain = 5
+        self.vehicle_antenna_gain = 3
 
         self.noise_power = 10 ** (self.sigma2 / 10)
 
@@ -27,7 +34,9 @@ class V2X:
         if mode == "rsu":
             return 128.1 + 37.6 * np.log10(np.sqrt(distance**2 + self.h_rsu**2) * 1e-3)
         else:
-            return 128.1 + 37.6 * np.log10(np.sqrt(distance**2 + self.h_bs**2) * 1e-3)
+            return 128.1 + 37.6 * np.log10(
+                np.sqrt((distance) ** 2 + self.h_bs**2) * 1e-3
+            )
 
     def get_shadowing(self):
         """
@@ -104,31 +113,44 @@ class V2X:
         shadowing_values = self.get_shadowing()
         fast_fading_values = self.get_fast_fading()
 
-        channel_gain_bs = 10 ** (
-            (
-                self.P_bs
-                - path_loss_values[:, 0]
-                - shadowing_values[:, 0]
-                - fast_fading_values[:, 0]
-            )
-            / 10
+        channel_gain_bs_db = (
+            self.P_bs
+            - path_loss_values[:, 0]
+            - shadowing_values[:, 0]
+            + fast_fading_values[:, 0]
+            + self.vehicle_antenna_gain
+            + self.bs_attena_gain
+            - self.noise_figure
         )
 
-        channel_gain_rsu = 10 ** (
-            (
-                self.P_rsu
-                - path_loss_values[:, 1]
-                - shadowing_values[:, 1]
-                - fast_fading_values[:, 1]
-            )
-            / 10
+        channel_gain_rsu_db = (
+            self.P_rsu
+            - path_loss_values[:, 1]
+            - shadowing_values[:, 1]
+            + fast_fading_values[:, 1]
+            + self.vehicle_antenna_gain
+            + self.rsu_attena_gain
+            - self.noise_figure
         )
+
+        # Normalize channel gains
+        _channel_gain_bs = channel_gain_bs_db / 120
+        _channel_gain_rsu = channel_gain_rsu_db / 120
 
         self.channel_gain = np.concatenate(
-            [channel_gain_bs.reshape(-1, 1), channel_gain_rsu.reshape(-1, 1)], axis=-1
+            [_channel_gain_bs.reshape(-1, 1), _channel_gain_rsu.reshape(-1, 1)],
+            axis=-1,
         )
-        data_rate_bs = self.B_bs * np.log2(1 + channel_gain_bs / self.noise_power)
-        data_rate_rsu = self.B_sub * np.log2(1 + channel_gain_rsu / self.noise_power)
+
+        channel_gain_bs = 10 ** (channel_gain_bs_db / 10)
+        channel_gain_rsu = 10 ** (channel_gain_rsu_db / 10)
+
+        data_rate_bs = self.B_bs * np.log2(
+            1 + np.divide(channel_gain_bs, self.noise_power)
+        )
+        data_rate_rsu = self.B_rsu * np.log2(
+            1 + np.divide(channel_gain_rsu, self.noise_power)
+        )
 
         self.data_rate = np.concatenate(
             [data_rate_bs.reshape(-1, 1), data_rate_rsu.reshape(-1, 1)], axis=-1
