@@ -4,7 +4,7 @@ import os
 import torch
 from tqdm import tqdm
 
-from cache import random_cache
+from cache import random_cache_for_train_drl
 from logger import *
 from module.bdqn import BDQNAgent
 from simulation import Environment
@@ -42,7 +42,6 @@ def main():
         lr=args.lr,
         capacity=args.capacity,
         batch_size=args.batch_size,
-        mini_batch=args.mini_batch,
         target_update=args.target_update,
         epsilon_decay=args.epsilon_decay,
         epsilon_min=args.epsilon_min,
@@ -58,15 +57,20 @@ def main():
 
         total_reward = 0
         state = env.reset()
+        total_delay = 0
+        total_hit_ratio = 0
+        total_success_ratio = 0
 
         for step in tqdm(range(args.training_steps), leave=False, desc="Steps"):
             action = agent.act(state)
 
             agent.logger.log("Epsilon", agent.epsilon, agent.steps)
 
-            _, reward, _ = env.step(action)
+            _, reward, logs = env.step(action)
 
-            random_cache(env)
+            avg_delay, total_request, total_hits, total_success = logs
+
+            random_cache_for_train_drl(env)
 
             next_state = env.state
 
@@ -83,6 +87,12 @@ def main():
                 if agent.steps != -1:
                     agent.logger.log("Loss", loss, agent.steps)
 
+            hit_ratio = total_hits / total_request
+            success_ratio = total_success / total_request
+
+            total_hit_ratio += hit_ratio
+            total_success_ratio += success_ratio
+            total_delay += avg_delay
             total_reward += reward
 
             reward_tracking.append(reward)
@@ -90,6 +100,11 @@ def main():
             state = next_state
 
         agent.logger.log("Reward", total_reward / args.training_steps, episode)
+        agent.logger.log("Hit Ratio", total_hit_ratio / args.training_steps, episode)
+        agent.logger.log(
+            "Success Ratio", total_success_ratio / args.training_steps, episode
+        )
+        agent.logger.log("Avg Delay", total_delay / args.training_steps, episode)
 
         # save model
         if episode % 5 == 0:
@@ -98,8 +113,8 @@ def main():
                 os.path.join(save_dir, "model_{}.pth".format(episode)),
             )
 
-    # Save the model
-    torch.save(agent.policy_net.state_dict(), os.path.join(save_dir, "model.pth"))
+        # Save the model
+        torch.save(agent.policy_net.state_dict(), os.path.join(save_dir, "model.pth"))
 
 
 if __name__ == "__main__":

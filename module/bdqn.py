@@ -196,8 +196,7 @@ class BDQNAgent:
         self.logger = logger
         self.dueling = dueling
         self.reduce = reduce
-        self.mini_batch = mini_batch
-        self.prioritized = False
+        self.prioritized = True
 
         self.policy_net = BDQN(
             state_dim, num_actions, action_dim, hidden_dim, dueling, reduce
@@ -279,7 +278,7 @@ class BDQNAgent:
 
             # Compute target Q-values
             target_q_values = rewards.unsqueeze(-1) + self.gamma * torch.mean(
-                target_next_q_values, dim=-1, keepdim=True
+                target_next_q_values, dim=1, keepdim=True
             )  # Shape: (batch_size, 1)
 
             target_q_values = target_q_values.repeat(1, self.num_actions)

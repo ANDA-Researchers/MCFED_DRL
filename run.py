@@ -14,7 +14,7 @@ args, configs = load_args()
 
 
 def load_weights(agent: BDQNAgent, path):
-    agent.policy_net.load_state_dict(torch.load(path))
+    agent.policy_net.load_state_dict(torch.load(path, weights_only=True))
 
 
 def main():
@@ -33,7 +33,6 @@ def main():
         lr=args.lr,
         capacity=args.capacity,
         batch_size=args.batch_size,
-        mini_batch=args.mini_batch,
         target_update=args.target_update,
         epsilon_decay=args.epsilon_decay,
         epsilon_min=args.epsilon_min,
@@ -43,10 +42,10 @@ def main():
     )
 
     # Load the weights
-    load_weights(agent, "P:\MCFED_DRL\logs\[20241114-123853] 3_100_15\model_15.pth")
+    # load_weights(agent, "P:\MCFED_DRL\logs\[20241115-003248] 3_10_15\model.pth")
 
-    cache = "random"
-    delivery = "drl"
+    cache = "mcfed"
+    delivery = "greedy"
 
     delay_tracking = []
     global_total_request = 0

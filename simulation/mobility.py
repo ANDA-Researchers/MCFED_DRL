@@ -6,159 +6,12 @@ from scipy.stats import truncnorm
 from torch import optim
 from torch.utils.data import DataLoader
 
+from .server import BS, RSU
+
 from .interrupt import Interrupt
 from .library import Library
-
-
-class DNN(torch.nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super(DNN, self).__init__()
-        self.fc1 = torch.nn.Linear(input_dim, 128)
-        self.fc2 = torch.nn.Linear(128, 64)
-        self.fc3 = torch.nn.Linear(64, output_dim)
-
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-
-
-class Vehicle:
-    def __init__(
-        self, position: tuple, velocity: float, data: dict, model, device, local_epochs
-    ) -> None:
-        train = True
-        self.position = position
-        self.velocity = velocity
-        self.data = data
-        if not train:
-            self.model = model
-            self.local_epochs = local_epochs
-            self.device = device
-            self.model = model.to(self.device)
-
-            (
-                self.train_cosine,
-                self.train_semantic,
-                self.train_labels,
-                self.train_ids,
-            ) = self.data["train"]
-            self.test_cosine, self.test_semantic, self.test_labels, self.test_ids = (
-                self.data["test"]
-            )
-            a = self.get_flatten_weights()
-
-        self.user_info = data["user_info"]
-        self.uid = self.data["uid"]
-
-        self.movies = self.data["movies"]
-
-    def update_velocity(self, velocity: float) -> None:
-        self.velocity = velocity
-
-    def update_position(self) -> None:
-        self.position = self.position + self.velocity
-
-    @property
-    def request(self):
-        # return np.random.choice(self.test_ids)
-        return np.random.choice(list(range(0, self.movies.shape[0])))
-
-    def predict(self):
-        self.model.eval()
-        with torch.no_grad():
-            for idx, movie_id in enumerate(self.test_ids):
-                self.movies[movie_id] = self.model(
-                    torch.tensor(np.array([self.test_semantic[idx]]))
-                    .float()
-                    .to(self.device),
-                )
-        return self.movies
-
-    def local_update(self):
-        self.model.train()
-        criterion = torch.nn.BCEWithLogitsLoss()
-        optimizer = optim.Adam(self.model.parameters(), lr=0.005)
-
-        # merge x_train and x_test
-        X = torch.tensor(np.array(self.train_semantic)).float().to(self.device)
-        Y = torch.tensor(np.array(self.train_labels)).float().to(self.device)
-
-        train_dataset = torch.utils.data.TensorDataset(X, Y)
-
-        train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-
-        patience = 10
-        best_loss = float("inf")
-        epochs_no_improve = 0
-        best_weights = copy.deepcopy(self.model.state_dict())
-
-        for _ in range(self.local_epochs):
-            total_loss = 0
-            for data in train_loader:
-                optimizer.zero_grad()
-                x = data[0]
-                y = data[1]
-                outputs = self.model(x)
-                loss = criterion(outputs, y.view_as(outputs))
-                loss.backward()
-                optimizer.step()
-                total_loss += loss.item() / len(train_loader)
-
-            if total_loss < best_loss:
-                best_loss = total_loss
-                best_weights = copy.deepcopy(self.model.state_dict())
-                epochs_no_improve = 0
-            else:
-                epochs_no_improve += 1
-
-            if epochs_no_improve == patience:
-                break
-        self.model.load_state_dict(best_weights)
-
-    def get_flatten_weights(self):
-        weights = self.model.state_dict()
-        return torch.cat(
-            [v.view(-1) for k, v in weights.items()] + [self.user_info.to(self.device)]
-        )
-
-    def get_weights(self):
-        weights = self.model.state_dict()
-        weights = {k: v.cpu() for k, v in weights.items()}
-        return weights
-
-    def set_weights(self, weights):
-        self.model.load_state_dict(weights)
-
-
-class RSU:
-    def __init__(self, position: tuple, capacity: int, model) -> None:
-        self.position = position
-        self.capacity = capacity
-        self.cache = np.random.randint(1, 3952, capacity)
-        self.model = model
-        self.cluster = None
-        self.interrupt = Interrupt()
-        self.interrupt.reset()
-
-    def had(self, data: int) -> bool:
-        return data in self.cache
-
-    def is_interrupt(self):
-        return self.interrupt.is_interrupt
-
-    def step(self, power):
-        self.interrupt.step(power)
-        return self.interrupt.is_interrupt
-
-
-class BS:
-    def __init__(self, position: tuple) -> None:
-        self.position = position
-
-    def had(self, data: int) -> bool:
-        return True
+from .mcfed import AECF
+from .vehicle import Vehicle
 
 
 class Mobility:
@@ -173,10 +26,11 @@ class Mobility:
         self.std_velocity = args.std_velocity
         self.bs = BS(self.length / 2)
 
-        self.library = Library(args)
-        self.base_model = DNN(50, 1)
+        self.library = Library()
+        self.base_model = AECF(self.library.num_items, 50, self.library.Y)
         self.local_epochs = args.num_local_epochs
         self.device = args.device
+        self.run_mode = args.run_mode
 
         assert (
             self.length % self.rsu_coverage == 0
@@ -207,7 +61,7 @@ class Mobility:
             capacity = self.rsu_capacity
             model = self.base_model
 
-            new_rsu = RSU(position, capacity, model)
+            new_rsu = RSU(position, capacity, model, self.library.num_items)
             self.rsu.append(new_rsu)
 
         self.update_coverage()
@@ -228,7 +82,7 @@ class Mobility:
 
     def add_vehicle(self, position: float) -> None:
         velocity = self.truncated_gaussian()
-        data = self.library.generate_client()
+        data = self.library.create_client()
         model = self.base_model
 
         new_vehicle = Vehicle(
@@ -238,6 +92,7 @@ class Mobility:
             model,
             self.device,
             self.local_epochs,
+            self.run_mode,
         )
 
         self.vehicle.append(new_vehicle)
@@ -264,17 +119,39 @@ class Mobility:
         self.distance = np.concatenate([distance_2, self.distance], axis=1)
 
     def update_request(self):
-        self.request = np.zeros((self.num_vehicle, self.library.max_movie_id + 1))
-        for idx, v in enumerate(self.vehicle):
-            reg = int(v.request)
-            self.request[idx][reg] = 1
+        self.request = np.zeros((self.num_vehicle, self.library.num_items))
+
+        if self.run_mode == "train":
+            for idx, v in enumerate(self.vehicle):
+                reg = int(v.request)
+                self.request[idx][reg] = 1
+        else:
+            total_content = list(range(self.library.num_items))
+            rate = 1
+            cached = []
+
+            for rsu in self.rsu:
+                cached.extend(rsu.cache)
+
+            cached = list(set(cached))
+            uncached = list(set(total_content) - set(cached))
+            for idx, v in enumerate(self.vehicle):
+                if np.random.rand() < rate:
+                    reg = np.random.choice(cached)
+                else:
+                    reg = np.random.choice(uncached)
+
+                self.request[idx][reg] = 1
 
     @property
     def storage(self):
-        storage = np.zeros((self.num_rsu, self.library.max_movie_id + 1))
+        storage = np.zeros((self.num_rsu + 2, self.library.num_items))
+        storage[0, :] = 1  # BS has all the content
+        storage[-1, :] = 1  # BS has all the content
         for idx, rsu in enumerate(self.rsu):
             for movie in rsu.cache:
-                storage[idx][movie] = 1
+                storage[idx + 1][movie] = 1
+
         return storage
 
     def step(self):
@@ -295,32 +172,3 @@ class Mobility:
         # Update RSU coverage
         self.update_coverage()
         self.update_request()
-
-
-if __name__ == "__main__":
-
-    args = {
-        "length": 2000,
-        "num_vehicle": 5,
-        "num_rsu": 2,
-        "rsu_capacity": 10,
-        "rsu_coverage": 1000,
-        "min_velocity": 10,
-        "max_velocity": 30,
-        "std_velocity": 5,
-    }
-
-    args = type("args", (object,), args)()
-
-    mobility = Mobility(args)
-    mobility.reset()
-
-    for i in range(10):
-        """Print the state of the environment"""
-        print("time step:", i)
-        print(mobility.distance)
-        print(mobility.coverage)
-        print(mobility.request)
-        print(mobility.reverse_coverage)
-
-        mobility.step()

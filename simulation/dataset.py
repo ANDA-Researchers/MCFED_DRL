@@ -1,167 +1,198 @@
-import json
-import numpy as np
 import pandas as pd
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
 import os
-import torch
-from tqdm import tqdm
-from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
+import json
+
+# Define the path to the data directory
+data_dir = "./data/ml-100k/"
+
+# File paths (adjust to your file locations)
+file_paths = {
+    "item": os.path.join(data_dir, "u.item"),  # Item data
+    "data": os.path.join(data_dir, "u.data"),  # Rating data
+    "user": os.path.join(data_dir, "u.user"),  # User information
+    "genre": os.path.join(data_dir, "u.genre"),  # Genre information
+}
 
 
-def load_movies():
-    movies = pd.read_csv(
-        "./data/ml-1m/movies.dat",
-        sep="::",
-        names=["movie_id", "title", "genres"],
-        encoding="latin1",
-        engine="python",
+# Function to preprocess the user data
+def preprocess_user_data(file_path):
+    """
+    Preprocess user data: Encode categorical variables, one-hot encode occupation, and normalize numerical variables.
+    """
+    user_columns = ["user_id", "age", "gender", "occupation", "zip_code"]
+    user_data = pd.read_csv(
+        file_path, sep="|", header=None, names=user_columns, encoding="latin-1"
     )
 
-    movies.drop(["title"], axis=1, inplace=True)
+    # Handle Missing Data (if any)
+    user_data = user_data.dropna()  # Drop rows with missing values
 
-    genres = set()
-    for movie in movies["genres"]:
-        genres.update(movie.split("|"))
+    # Encode the categorical variable "gender"
+    user_data["gender"] = user_data["gender"].map({"M": 1, "F": 0})  # 'M' → 1, 'F' → 0
 
-    genres_new = []
-
-    for genre in genres:
-        if genre == "Children's":
-            genres_new.append("Children".lower())
-        elif genre == "Film-Noir":
-            genres_new.append("Noir".lower())
-        else:
-            genres_new.append(genre.lower())
-
-    genres = genres_new
-
-    for genre in genres:
-        movies[genre] = movies["genres"].apply(lambda x: 1 if genre in x.lower() else 0)
-
-    movies = movies.drop(["genres"], axis=1)
-
-    glove = load_glove(words=genres)
-
-    sparse_vecs = {}
-    semantic_vecs = {}
-
-    with tqdm(range(len(movies)), desc="Initializing vectors") as pbar:
-        for index, row in movies.iterrows():
-            sparse_vec = row[1:].to_numpy().astype(int)
-            semantic_vec = [glove[genre] for genre in genres if row[genre] == 1]
-            semantic_vec = np.mean(semantic_vec, axis=0)
-            sparse_vecs[row["movie_id"]] = sparse_vec
-            semantic_vecs[row["movie_id"]] = semantic_vec
-            pbar.update(1)
-
-    movies.drop(genres, axis=1, inplace=True)
-
-    for movie_id in range(1, movies["movie_id"].max() + 1):
-        if movie_id not in sparse_vecs:
-            sparse_vecs[movie_id] = np.zeros(len(genres))
-            semantic_vecs[movie_id] = np.zeros((50,))
-
-    item_ids = sorted(sparse_vecs.keys())
-    sparse_matrix = np.array([sparse_vecs[item_id] for item_id in item_ids])
-    semantic_matrix = np.array([semantic_vecs[item_id] for item_id in item_ids])
-
-    return sparse_matrix, semantic_matrix
-
-
-def load_ratings():
-    ratings = pd.read_csv(
-        "./data/ml-1m/ratings.dat",
-        sep="::",
-        names=["user_id", "movie_id", "rating", "timestamp"],
-        engine="python",
+    # One-hot encode the categorical variable "occupation"
+    user_data = pd.get_dummies(
+        user_data,
+        columns=["occupation"],
+        prefix="occupation",
+        drop_first=True,
+        dtype=int,
     )
 
-    ratings = ratings.sort_values(by="timestamp")
-    ratings["rating"] = (ratings["rating"]) / 5.0
+    # Normalize the "age" column
+    scaler = MinMaxScaler()
+    user_data["age"] = scaler.fit_transform(
+        user_data[["age"]]
+    )  # Normalize age to a range [0, 1]
 
-    users_info = pd.read_csv(
-        "./data/ml-1m/users.dat",
-        sep="::",
-        names=["user_id", "gender", "age", "occupation", "zip"],
-        engine="python",
+    # Drop 'zip_code' column as it is not needed for collaborative filtering
+    user_data = user_data.drop(columns=["zip_code"])
+
+    user_data = user_data.copy()
+    temp = user_data.iloc[:, 1:].values.tolist()
+
+    user_data = user_data.drop(columns=user_data.columns[1:])
+    user_data["data"] = temp
+
+    return user_data
+
+
+# Function to preprocess the item data (with one-hot genre embeddings)
+def preprocess_item_data(file_path):
+    """
+    Preprocess item data: One-hot encode the genres and keep item_id.
+    """
+    # Load the item data (item information such as title, genre)
+    item_columns = [
+        "item_id",
+        "title",
+        "release_date",
+        "video_release_date",
+        "IMDb_URL",
+    ] + [f"genre_{i}" for i in range(19)]
+    item_data = pd.read_csv(
+        file_path, sep="|", header=None, names=item_columns, encoding="latin-1"
     )
 
-    users_info = process_user_info(users_info)
+    # Keep only the item_id and genre columns from the item data
+    item_data_genres = item_data[
+        ["item_id"] + [f"genre_{i}" for i in range(19)]
+    ]  # Selecting item_id and genre columns
 
-    # ratings = ratings.merge(users_info, on="user_id")
+    item_data_genres = item_data_genres.copy()
+    item_data_genres["genres"] = item_data_genres.iloc[:, 1:].values.tolist()
 
-    return ratings, users_info
+    # Drop the original genre columns
+    item_data_genres = item_data_genres.drop(columns=[f"genre_{i}" for i in range(19)])
 
-
-def download_dataset():
-    os.system("wget https://files.grouplens.org/datasets/movielens/ml-1m.zip -P ./data")
-    os.system("unzip ./data/ml-1m.zip -d ./data")
-
-
-def load_glove(
-    words=None,
-    glove_path="./data/glove.6B/glove.6B.50d.txt",
-    save_path="./data/emb.json",
-):
-    if os.path.exists(save_path):
-        with open(save_path, "r") as f:
-            return json.load(f)
-
-    glove = {}
-    with open(glove_path, "r", encoding="utf8") as f:
-        for line in tqdm(f):
-            values = line.split()
-            word = values[0]
-            if words is None or word in words:
-                vector = np.asarray(values[1:], dtype="float32")
-                glove[word] = vector.tolist()
-
-    with open(save_path, "w") as f:
-        json.dump(glove, f)
-
-    return glove
+    return item_data_genres
 
 
-def compute_cosine_similarities(sparse_matrix, semantic_matrix):
-    sparse_norms = np.linalg.norm(sparse_matrix, axis=1)
-    semantic_norms = np.linalg.norm(semantic_matrix, axis=1)
+# Function to preprocess rating data
+def preprocess_rating_data(file_path):
+    """
+    Preprocess rating data: Handle missing ratings and ensure clean dataset.
+    """
+    rating_columns = ["user_id", "item_id", "rating", "timestamp"]
+    rating_data = pd.read_csv(file_path, sep="\t", header=None, names=rating_columns)
 
-    with np.errstate(invalid="ignore"):
-        cosine_sparse_matrix = np.dot(sparse_matrix, sparse_matrix.T) / np.outer(
-            sparse_norms, sparse_norms
-        )
-        cosine_sparse_matrix = np.nan_to_num(cosine_sparse_matrix)
+    # Handle Missing Data (if any)
+    rating_data = rating_data.dropna()  # Drop rows with missing values
 
-        cosine_semantic_matrix = np.dot(semantic_matrix, semantic_matrix.T) / np.outer(
-            semantic_norms, semantic_norms
-        )
-        cosine_semantic_matrix = np.nan_to_num(cosine_semantic_matrix)
-
-    return cosine_sparse_matrix, cosine_semantic_matrix
+    return rating_data
 
 
-def process_user_info(user_info):
-    user_info["occupation"] = user_info["occupation"] / 20
+# Function to create user request sequences
+def create_user_request_sequences(rating_data):
+    """
+    Create user request sequences based on the interaction timestamps.
+    Each user’s request sequence is an ordered list of item_ids they interacted with over time.
+    """
+    # Sort by user_id and timestamp to ensure temporal order
+    rating_data["timestamp"] = pd.to_datetime(rating_data["timestamp"], unit="s")
+    rating_data = rating_data.sort_values(by=["user_id", "timestamp"])
 
-    user_info["gender"] = user_info["gender"].map({"M": 0.3, "F": 0.15})
+    # Group by user_id and create the sequence of item_ids they interacted with
+    user_request_sequences = (
+        rating_data.groupby("user_id")["item_id"].apply(list).reset_index()
+    )
 
-    def age_map(age):
-        if 0 <= age <= 10:
-            return 1 / 7
-        elif 11 <= age <= 20:
-            return 2 / 7
-        elif 21 <= age <= 29:
-            return 3 / 7
-        elif 30 <= age <= 38:
-            return 4 / 7
-        elif 39 <= age <= 47:
-            return 5 / 7
-        elif 48 <= age <= 55:
-            return 6 / 7
-        else:
-            return 1
+    user_request_sequences.columns = ["user_id", "temporal"]
 
-    user_info["age"] = user_info["age"].apply(lambda age: age_map(age))
+    return user_request_sequences
 
-    user_info = user_info.drop(["zip"], axis=1)
 
-    return user_info
+def load_genre_data():
+    genre_columns = ["genre_id", "genre"]
+    genre_data = pd.read_csv(
+        file_paths["genre"], sep="|", header=None, names=genre_columns
+    )
+
+    genre_data_dict = dict(zip(genre_data["genre"], genre_data["genre_id"]))
+
+    with open("./data/emb.json", "r") as f:
+        genre_embeddings = json.load(f)
+
+    genre_vector = np.zeros((len(genre_data), 50))
+
+    for k, v in genre_data_dict.items():
+        t = v.lower()
+
+        if t.find("unknown") != -1:
+            continue
+
+        if t.find("child") != -1:
+            t = "children"
+        if t.find("sci") != -1:
+            t = "sci-fi"
+        if t.find("noir") != -1:
+            t = "noir"
+
+        genre_vector[k] = genre_embeddings[t]
+
+    return genre_vector
+
+
+def get_data():
+    # Load and preprocess the item data
+    item_data = preprocess_item_data(file_paths["item"])
+
+    # Load and preprocess the user data
+    user_data = preprocess_user_data(file_paths["user"])
+
+    # Load and preprocess the rating data
+    rating_data = preprocess_rating_data(file_paths["data"])
+
+    # Create user request sequences
+    user_request_sequences = create_user_request_sequences(rating_data)
+
+    # Load genre vectors
+    genres_vector = load_genre_data()
+    vecs = []
+    # iterate over each row and multiply the genre_vector
+    for i in range(len(item_data)):
+        item_id = item_data.loc[i]["item_id"]
+        genre = np.array(item_data.loc[i]["genres"])
+        vecs.append(np.sum(genres_vector[genre], axis=0) / genre.nonzero()[0].shape[0])
+
+    item_data.loc[:, "semantic"] = vecs
+
+    item_data.columns = ["item_id", "sparse", "semantic"]
+
+    user_data["user_id"] = user_data["user_id"].apply(lambda x: x - 1)
+    item_data["item_id"] = item_data["item_id"].apply(lambda x: x - 1)
+    rating_data["user_id"] = rating_data["user_id"].apply(lambda x: x - 1)
+    rating_data["item_id"] = rating_data["item_id"].apply(lambda x: x - 1)
+
+    # substract 1 from user_request_sequences
+    user_request_sequences["user_id"] = user_request_sequences["user_id"].apply(
+        lambda x: x - 1
+    )
+
+    user_request_sequences["temporal"] = user_request_sequences["temporal"].apply(
+        lambda x: [i - 1 for i in x]
+    )
+
+    return user_data, item_data, rating_data, user_request_sequences
