@@ -31,6 +31,7 @@ class Mobility:
         self.local_epochs = args.num_local_epochs
         self.device = args.device
         self.run_mode = args.run_mode
+        self.interruption = args.interruption
 
         assert (
             self.length % self.rsu_coverage == 0
@@ -61,7 +62,13 @@ class Mobility:
             capacity = self.rsu_capacity
             model = self.base_model
 
-            new_rsu = RSU(position, capacity, model, self.library.num_items)
+            new_rsu = RSU(
+                position,
+                capacity,
+                model,
+                self.library.num_items,
+                self.interruption,
+            )
             self.rsu.append(new_rsu)
 
         self.update_coverage()
@@ -127,17 +134,25 @@ class Mobility:
                 self.request[idx][reg] = 1
         else:
             total_content = list(range(self.library.num_items))
-            rate = 1
+            prob = (0.5, 0.3, 0.2)
             cached = []
 
-            for rsu in self.rsu:
-                cached.extend(rsu.cache)
+            for r in self.rsu:
+                cached.extend(r.cache)
 
             cached = list(set(cached))
             uncached = list(set(total_content) - set(cached))
             for idx, v in enumerate(self.vehicle):
-                if np.random.rand() < rate:
-                    reg = np.random.choice(cached)
+                local_cache = self.rsu[self.reverse_coverage[idx]].cache
+
+                cached_not_local = list(set(cached) - set(local_cache))
+
+                option = np.random.choice([0, 1, 2], p=prob)
+
+                if option == 0:
+                    reg = np.random.choice(local_cache)
+                elif option == 1:
+                    reg = np.random.choice(cached_not_local)
                 else:
                     reg = np.random.choice(uncached)
 

@@ -15,4 +15,6 @@ class AECF(nn.Module):
         x_i = F.relu(self.encoder(r_i))
         Y = self.Y.to(r_i.device)
         r_i_reconstructed = torch.matmul(x_i, Y.T)
+        # perform sigmoid to get the values between 0 and 1
+        r_i_reconstructed = torch.sigmoid(r_i_reconstructed)
         return r_i_reconstructed

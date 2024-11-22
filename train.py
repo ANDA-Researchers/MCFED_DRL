@@ -1,6 +1,7 @@
 import datetime
 import os
 
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -11,6 +12,9 @@ from simulation import Environment
 from utils import load_args
 
 args, configs = load_args()
+
+torch.manual_seed(0)
+np.random.seed(0)
 
 
 def main():
@@ -40,6 +44,7 @@ def main():
         hidden_dim=args.hidden_dim,
         gamma=args.gamma,
         lr=args.lr,
+        tau=args.tau,
         capacity=args.capacity,
         batch_size=args.batch_size,
         target_update=args.target_update,
@@ -83,7 +88,6 @@ def main():
 
             if step % args.train_every == 0:
                 loss = agent.learn()
-
                 if agent.steps != -1:
                     agent.logger.log("Loss", loss, agent.steps)
 

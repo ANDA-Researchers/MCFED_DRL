@@ -2,10 +2,11 @@ import numpy as np
 
 
 class Interrupt(object):
-    def __init__(self):
+    def __init__(self, enable=True):
         self.states = [1.011, 1.012, 1.013, 1.014]
         self.transition_matrix = np.ones((len(self.states), len(self.states))) * 0.25
         self.recovery_time = 0
+        self.enable = enable
 
     def reset(self):
         self.state_idx = np.random.choice(list(range(len(self.states))))
@@ -28,7 +29,7 @@ class Interrupt(object):
         rate = np.random.rand()
 
         if rate < interrupt_prob:
-            self.recovery_time = 4
+            self.recovery_time = 2
 
         return self.is_interrupt
 
@@ -38,6 +39,8 @@ class Interrupt(object):
 
     @property
     def is_interrupt(self):
+        if not self.enable:
+            return False
         return self.recovery_time != 0
 
 

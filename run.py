@@ -17,8 +17,11 @@ def load_weights(agent: BDQNAgent, path):
     agent.policy_net.load_state_dict(torch.load(path, weights_only=True))
 
 
-def main():
+def main(cache, delivery, cache_size):
+
     created_at = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
+
+    args.rsu_capacity = cache_size
 
     env = Environment(
         args=args,
@@ -42,10 +45,7 @@ def main():
     )
 
     # Load the weights
-    # load_weights(agent, "P:\MCFED_DRL\logs\[20241115-003248] 3_10_15\model.pth")
-
-    cache = "mcfed"
-    delivery = "greedy"
+    load_weights(agent, "P:\MCFED_DRL\logs\[20241120-072531] 3_200_20\model.pth")
 
     delay_tracking = []
     global_total_request = 0
@@ -63,6 +63,8 @@ def main():
         elif cache == "avgfed":
             avgfed(env)
 
+        state = env.state
+
         for timestep in tqdm(range(args.time_step_per_round), desc=f"timestep "):
             if delivery == "random":
                 action = random_delivery(env)
@@ -73,8 +75,8 @@ def main():
             elif delivery == "drl":
                 action = agent.act(state, inference=True)
 
-            _, reward, logs = env.step(action)
-
+            # _, reward, logs = env.step(action)
+            next_state, reward, logs = env.step(action)
             avg_delay, total_request, total_hits, total_success = logs
 
             global_total_request += total_request
@@ -82,6 +84,8 @@ def main():
             global_total_success += total_success
 
             delay_tracking.append(avg_delay)
+
+            state = next_state
 
     # save the results as json
     results = {
@@ -98,4 +102,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    for cache_size in [25, 50, 75, 100, 125, 150, 175, 200]:
+        for cache in ["random", "mcfed", "avgfed"]:
+            for delivery in ["random", "greedy", "drl"]:
+                if cache in ["random", "avgfed"] and delivery != "drl":
+                    continue
+                main(cache, delivery, cache_size)

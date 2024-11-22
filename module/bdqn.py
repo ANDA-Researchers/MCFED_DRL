@@ -32,25 +32,25 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-class PrioritizedReplayMemory(object):
+class PrioritizedReplayMemory:
     def __init__(self, capacity, alpha=0.6):
         self.Transition = namedtuple(
-            "Transition",
-            ("state", "action", "next_state", "reward"),
+            "Transition", ("state", "action", "next_state", "reward")
         )
-        self.memory = deque([], maxlen=capacity)
-        self.priorities = deque([], maxlen=capacity)
-        self.alpha = (
-            alpha  # Controls the level of prioritization (0 means no prioritization)
-        )
+        self.capacity = capacity
+        self.memory = []
+        self.priorities = np.zeros((capacity,), dtype=np.float32)
+        self.alpha = alpha  # Level of prioritization
+        self.position = 0
 
     def push(self, *args):
         """Save a transition with the maximum priority."""
-        max_priority = max(
-            list(self.priorities), default=1.0
-        )  # Ensure non-zero initial priority
-        self.memory.append(self.Transition(*args))
-        self.priorities.append(max_priority)
+        max_priority = self.priorities.max() if self.memory else 1.0
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = self.Transition(*args)
+        self.priorities[self.position] = max_priority
+        self.position = (self.position + 1) % self.capacity
 
     def sample(self, batch_size, beta=0.4):
         """Sample a batch of transitions based on priorities."""
@@ -58,7 +58,8 @@ class PrioritizedReplayMemory(object):
             raise ValueError("Memory is empty")
 
         # Calculate sampling probabilities proportional to priorities
-        scaled_priorities = np.array(self.priorities) ** self.alpha
+        priorities = self.priorities[: len(self.memory)]
+        scaled_priorities = priorities**self.alpha
         sampling_probabilities = scaled_priorities / scaled_priorities.sum()
 
         # Sample indices based on the calculated probabilities
@@ -76,8 +77,9 @@ class PrioritizedReplayMemory(object):
 
     def update_priorities(self, indices, priorities):
         """Update the priorities of sampled transitions."""
-        for idx, priority in zip(indices, priorities):
-            self.priorities[idx] = priority
+        indices = np.asarray(indices)  # Ensure indices are a NumPy array
+        priorities = np.asarray(priorities)  # Ensure priorities are a NumPy array
+        self.priorities[indices] = priorities  # Vectorized update
 
     def __len__(self):
         return len(self.memory)
@@ -171,7 +173,7 @@ class BDQNAgent:
         lr=1e-3,
         capacity=10000,
         batch_size=64,
-        mini_batch=1,
+        tau=1e-3,
         target_update=10,
         epsilon_decay=0.995,
         epsilon_min=0.01,
@@ -197,6 +199,7 @@ class BDQNAgent:
         self.dueling = dueling
         self.reduce = reduce
         self.prioritized = True
+        self.tau = tau
 
         self.policy_net = BDQN(
             state_dim, num_actions, action_dim, hidden_dim, dueling, reduce
@@ -235,7 +238,7 @@ class BDQNAgent:
         return action
 
     def learn(self):
-        if len(self.memory) < self.batch_size:
+        if len(self.memory) < self.batch_size or len(self.memory) < 2000:
             return
 
         self.steps += 1
@@ -274,14 +277,18 @@ class BDQNAgent:
 
             target_next_q_values = target_next_q_values.gather(
                 2, best_next_actions.unsqueeze(-1)
-            ).squeeze(-1)
+            ).squeeze(
+                -1
+            )  # batch_size, num_actions
 
-            # Compute target Q-values
-            target_q_values = rewards.unsqueeze(-1) + self.gamma * torch.mean(
-                target_next_q_values, dim=1, keepdim=True
-            )  # Shape: (batch_size, 1)
+            # Compute target Q-values for each action in num_actions
+            target_q_values = rewards.unsqueeze(-1) + self.gamma * target_next_q_values
 
-            target_q_values = target_q_values.repeat(1, self.num_actions)
+            # target_q_values = rewards.unsqueeze(-1) + self.gamma * torch.mean(
+            #     target_next_q_values, dim=1, keepdim=True
+            # )  # Shape: (batch_size, 1)
+
+            # target_q_values = target_q_values.repeat(1, self.num_actions)
 
         # get the q_values for the actions taken, q_values is a tensors of shape (batch_size, num_actions, action_dim)
         q_values_taken = q_values.gather(2, actions.unsqueeze(-1)).squeeze(-1)
@@ -304,12 +311,19 @@ class BDQNAgent:
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
 
-        # Update the target network
-        if self.steps % self.target_update == 0:
-            self.update_target()
+        self.update_target(soft=True)
 
         return loss.item()
 
-    def update_target(self):
+    def update_target(self, soft=True):
         """Update the target network with the weights from the policy network."""
-        self.target_net.load_state_dict(self.policy_net.state_dict())
+        if soft:
+            for target_param, policy_param in zip(
+                self.target_net.parameters(), self.policy_net.parameters()
+            ):
+                target_param.data.copy_(
+                    target_param.data * (1.0 - self.tau) + policy_param.data * self.tau
+                )
+        else:
+            if self.steps % self.target_update == 0:
+                self.target_net.load_state_dict(self.policy_net.state_dict())

@@ -9,6 +9,9 @@ def random_cache_for_train_drl(env):
     for rsu in env.rsu:
         rsu.cache = np.random.choice(env.library.num_items, rsu.capacity, replace=False)
 
+    env.mobility.update_request()
+    env.update_state()
+
 
 def random_cache(env):
     # Select vehicles to join the Federated Learning
@@ -204,8 +207,10 @@ def mcfed(env):
         if len(predictions) == 0:
             continue
         popularity = np.mean(predictions, axis=0)
-        np.argsort(popularity)[::-1][: env.rsu[r].capacity]
         env.rsu[r].cache = np.argsort(popularity)[::-1][: env.rsu[r].capacity]
+
+    env.mobility.update_request()
+    env.update_state()
 
 
 def avgfed(env):

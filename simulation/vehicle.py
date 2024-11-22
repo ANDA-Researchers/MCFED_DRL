@@ -31,8 +31,8 @@ class Vehicle:
             self.upi = upi.to(self.device)
 
             self.mask = self.r_i != 0
-            self.request_list = torch.ones_like(self.r_i) * self.r_i.mean()
-            self.request_list[self.mask] = 0
+            self.preference = torch.ones_like(self.r_i) * self.r_i[self.mask].mean()
+            self.preference[self.mask] = 0
 
     def update_velocity(self, velocity: float) -> None:
         self.velocity = velocity
@@ -42,27 +42,26 @@ class Vehicle:
 
     @property
     def request(self):
-        prob = torch.softmax(self.request_list, dim=0)
-        sample = torch.multinomial(prob, 1)
+        prob = self.preference
+        sample = torch.distributions.Categorical(prob).sample()
         return sample
 
     def predict(self):
         self.model.eval()
         output = self.model(self.r_i)
-        mask = self.r_i != 0
-        output[mask] = 0
-        self.request_list = output
+        output[self.mask] = 0
+        self.preference = output
         return output.cpu().detach().numpy()
 
     def local_update(self):
         self.model.train()
-        optimizer = optim.Adam(self.model.parameters(), lr=0.01)
+        optimizer = optim.Adam(self.model.parameters(), lr=0.001)
         criterion = torch.nn.MSELoss()
 
         for epoch in range(self.local_epochs):
             optimizer.zero_grad()
             output = self.model(self.r_i)
-            loss = criterion(output, self.r_i)
+            loss = criterion(output[self.mask], self.r_i[self.mask])
             loss.backward()
             optimizer.step()
 
