@@ -16,6 +16,8 @@ def random_cache_for_train_drl(env):
 def random_cache(env):
     for rsu in env.rsu:
         rsu.cache = np.random.choice(env.library.num_items, rsu.capacity, replace=False)
+        
+    env.update_state()
 
 
 def mcfed(env):
@@ -118,7 +120,6 @@ def mcfed(env):
         popularity = np.mean(predictions, axis=0)
         env.rsu[r].cache = np.argsort(popularity)[::-1][: env.rsu[r].capacity]
 
-    env.mobility.update_request()
     env.update_state()
 
 
@@ -184,3 +185,5 @@ def avgfed(env):
 def nocache(env):
     for rsu in env.rsu:
         rsu.cache = []
+        
+    env.update_state()

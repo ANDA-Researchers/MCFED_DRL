@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from cache import avgfed, mcfed, random_cache
+from cache import avgfed, mcfed, random_cache, nocache
 from delivery import greedy_delivery, nocache_delivery, random_delivery
 from module.bdqn import BDQNAgent
 from simulation import Environment
@@ -50,7 +50,7 @@ def main(cache, delivery, cache_size):
     )
 
     # Load the weights
-    load_weights(agent, "P:\MCFED_DRL\logs\[20241127-023222] 3_200_30\model.pth")
+    load_weights(agent, "./model.pth")
 
     delay_tracking = []
     round_avg_delay_tracking = []
@@ -75,7 +75,7 @@ def main(cache, delivery, cache_size):
         elif cache == "avgfed":
             avgfed(env)
         elif cache == "nocache":
-            nocache_delivery(env)
+            nocache(env)
 
         state = env.state
 
@@ -136,9 +136,9 @@ def main(cache, delivery, cache_size):
 if __name__ == "__main__":
     for cache_size in [5, 10, 30, 50, 80, 100]:
         for cache in [
-            "random",
-            "mcfed",
-            "avgfed",
+            # "random",
+            # "mcfed",
+            # "avgfed",
             "nocache",
         ]:
             for delivery in ["random", "greedy", "drl", "norsu"]:
