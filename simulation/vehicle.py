@@ -30,7 +30,7 @@ class Vehicle:
             self.urh = urh
             self.upi = upi.to(self.device)
             self.model = model
-            self.batch_size = 32
+            self.batch_size = 128
             self.model.to(self.device)
             self.preference = self.r_i[self.test].cpu()
 

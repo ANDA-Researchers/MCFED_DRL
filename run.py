@@ -136,10 +136,10 @@ def main(cache, delivery, cache_size):
 if __name__ == "__main__":
     for cache_size in [5, 10, 30, 50, 80, 100]:
         for cache in [
-            # "random",
-            # "mcfed",
-            # "avgfed",
-            "nocache",
+            "random",
+            "mcfed",
+            "avgfed",
+            # "nocache",
         ]:
             for delivery in ["random", "greedy", "drl", "norsu"]:
                 if cache in ["random", "avgfed", "nocache"] and delivery not in [
