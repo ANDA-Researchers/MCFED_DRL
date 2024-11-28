@@ -19,15 +19,20 @@ class Environment:
 
     def step(self, action):
         action = action.cpu().numpy()
-        avg_delay, total_request, total_hits, total_fails = self.compute_delay(action)
+        avg_delay, total_request, total_hits, total_fails, total_exceed = (
+            self.compute_delay(action)
+        )
         hit_ratio = total_hits / total_request
         success_ratio = (total_request - total_fails) / total_request
+        total_exceed_ratio = total_exceed / total_request
 
         reward = (
             torch.tensor(
-                -avg_delay * self.args.alpha
-                + hit_ratio * self.args.beta
-                + success_ratio * self.args.mu,
+                -avg_delay * self.args.alpha1
+                + hit_ratio * self.args.alpha2
+                + success_ratio * self.args.alpha3
+                - total_exceed_ratio * self.args.alpha4
+                + self.args.baseline,
                 dtype=torch.float32,
             )
             .unsqueeze(0)
@@ -54,6 +59,9 @@ class Environment:
         delays = []
         total_hits = 0  # number of download from the cache
         total_fails = 0  # number of successful connections (no fallback)
+        total_exceed = (
+            0  # number of connections that exceed the maximum number of connections
+        )
 
         # count total number of requests
         total_request = np.count_nonzero(self.request)
@@ -68,9 +76,12 @@ class Environment:
                 local_rsu = self.get_local_rsu_of_vehicle(vehicle_idx)
                 connection_count[local_rsu] += 1
 
+        max_connection = self.args.max_connections
         # compute the power consumption of each rsu and step the interruption
         for i in range(self.args.num_rsu):
             power = self.channel.P_rsu * connection_count[i]
+            if connection_count[i] > max_connection:
+                total_exceed += int(connection_count[i] - max_connection)
             self.rsu[i].step(power)
 
         for vehicle_idx in request_vehicles:
@@ -136,7 +147,7 @@ class Environment:
         # compute the average delay, hit ratio, and success ratio
         avg_delay = np.mean(delays)
 
-        return avg_delay, total_request, total_hits, total_fails
+        return avg_delay, total_request, total_hits, total_fails, total_exceed
 
     @property
     def vehicle(self):

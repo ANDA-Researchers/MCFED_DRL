@@ -3,7 +3,7 @@ import numpy as np
 
 class V2X:
     def __init__(self, args=None) -> None:
-        self.B_rsu = 1e6  # 1 MHz
+        self.B_rsu = 2e6  # 1 MHz
         self.B_bs = 1e6  # 540 kHz
         self.P_bs = 43
         self.P_rsu = 30

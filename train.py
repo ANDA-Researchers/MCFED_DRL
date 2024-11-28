@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 
 import numpy as np
@@ -119,6 +120,10 @@ def main():
 
         # Save the model
         torch.save(agent.policy_net.state_dict(), os.path.join(save_dir, "model.pth"))
+
+        # Save args as json
+        with open(os.path.join(save_dir, "args.json"), "w") as file:
+            json.dump(vars(args), file, indent=4)
 
 
 if __name__ == "__main__":

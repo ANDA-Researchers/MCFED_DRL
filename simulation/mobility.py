@@ -10,7 +10,7 @@ from .server import BS, RSU
 
 from .interrupt import Interrupt
 from .library import Library
-from .mcfed import AECF
+from .mcfed import AECF, BaseModel
 from .vehicle import Vehicle
 
 
@@ -27,7 +27,7 @@ class Mobility:
         self.bs = BS(self.length / 2)
 
         self.library = Library()
-        self.base_model = AECF(self.library.num_items, 50, self.library.Y)
+        self.base_model = BaseModel(args.fl_hidden_dim, self.library.num_items)
         self.local_epochs = args.num_local_epochs
         self.device = args.device
         self.run_mode = args.run_mode
@@ -128,7 +128,7 @@ class Mobility:
     def update_request(self):
         self.request = np.zeros((self.num_vehicle, self.library.num_items))
 
-        if self.run_mode == "train":
+        if self.run_mode == "simulation":
             for idx, v in enumerate(self.vehicle):
                 reg = int(v.request)
                 self.request[idx][reg] = 1

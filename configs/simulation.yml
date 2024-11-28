@@ -1,14 +1,14 @@
 # Run mode
-run_mode: "drl"  # Run mode for the simulation (e.g., 'train' or 'test')
+run_mode: "simulation"  # 'simulation' or 'train'
 
 # Loggers
 logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
 
 # Simulation settings
 num_rsu: 3  # Number of RSUs (Road Side Units)
-num_vehicle: 20  # Total number of vehicles in the simulation
-time_step_per_round: 10  # Duration of each round in time steps
-num_rounds: 30  # Total number of rounds for the simulation
+num_vehicle: 30  # Total number of vehicles in the simulation
+time_step_per_round: 60  # Duration of each round in time steps
+num_rounds: 10  # Total number of rounds for the simulation
 content_size: 4000000  # Size of content in bytes (4e6)
 deadline: 1  # Deadline for content delivery in seconds
 interruption: false  # Whether to allow interruptions or not
@@ -20,15 +20,16 @@ std_velocity: 2.5  # Standard deviation of vehicle speed
 
 # Connection settings
 rsu_coverage: 500  # Coverage area of each RSU in meters
-rsu_capacity: 25  # Maximum capacity of RSUs
+rsu_capacity: 200  # Maximum capacity of RSUs
 cloud_rate: 50000000  # Cloud connection rate (100e6)
 fiber_rate: 100000000  # Fiber optic connection rate (150e6)
 max_connections: 10  # Maximum simultaneous connections
 
 # FL (Federated Learning) settings
 num_clusters: 3  # Number of clusters in FL
-num_local_epochs: 40  # Number of local training epochs
+num_local_epochs: 20  # Number of local training epochs
 parallel_update: false  # Whether to use parallel updates or not
+fl_hidden_dim: 64  # Hidden dimension for the neural network
 
 # DRL (Deep Reinforcement Learning) settings
 episodes: 200  # Number of episodes to run
@@ -43,7 +44,9 @@ target_update: 1000   # Frequency of target network updates
 training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99999  # Decay rate for exploration
 epsilon_min: 0.02 # Minimum value for epsilon
-alpha: 100  # Alpha parameter for avg delay
-beta: 1 # Beta parameter for the hit ratio
-mu: 1  # Mu parameter for the the success ratio
+alpha1: 100  # Alpha parameter for avg delay
+alpha2: 1 # Beta parameter for the hit ratio
+alpha3: 1  # Mu parameter for the the success ratio
+alpha4: 1 # penalty
+baseline: 30  # Baseline value for the reward
 tau: 0.001  # Tau parameter for soft update

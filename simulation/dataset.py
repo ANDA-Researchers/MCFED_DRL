@@ -173,7 +173,6 @@ def get_data():
     vecs = []
     # iterate over each row and multiply the genre_vector
     for i in range(len(item_data)):
-        item_id = item_data.loc[i]["item_id"]
         genre = np.array(item_data.loc[i]["genres"])
         vecs.append(np.sum(genres_vector[genre], axis=0) / genre.nonzero()[0].shape[0])
 

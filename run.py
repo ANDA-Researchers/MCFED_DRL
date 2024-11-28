@@ -1,6 +1,7 @@
 import datetime
 import os
 
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -9,6 +10,10 @@ from delivery import greedy_delivery, nocache_delivery, random_delivery
 from module.bdqn import BDQNAgent
 from simulation import Environment
 from utils import load_args, save_results
+
+torch.manual_seed(0)
+np.random.seed(0)
+
 
 args, configs = load_args()
 
@@ -45,9 +50,13 @@ def main(cache, delivery, cache_size):
     )
 
     # Load the weights
-    load_weights(agent, "P:\MCFED_DRL\logs\[20241120-072531] 3_200_20\model.pth")
+    load_weights(agent, "P:\MCFED_DRL\logs\[20241127-023222] 3_200_30\model.pth")
 
     delay_tracking = []
+    round_avg_delay_tracking = []
+    round_hit_ratio_tracking = []
+    round_success_ratio_tracking = []
+
     global_total_request = 0
     global_total_hits = 0
     global_total_success = 0
@@ -55,6 +64,9 @@ def main(cache, delivery, cache_size):
     state = env.reset()
     for round in range(args.num_rounds):
         print(f"Round: {round}")
+        round_total_request = 0
+        round_total_hits = 0
+        round_total_success = 0
         # Put cache replacement policy here
         if cache == "random":
             random_cache(env)
@@ -62,6 +74,8 @@ def main(cache, delivery, cache_size):
             mcfed(env)
         elif cache == "avgfed":
             avgfed(env)
+        elif cache == "nocache":
+            nocache_delivery(env)
 
         state = env.state
 
@@ -70,7 +84,7 @@ def main(cache, delivery, cache_size):
                 action = random_delivery(env)
             elif delivery == "greedy":
                 action = greedy_delivery(env)
-            elif delivery == "nocache":
+            elif delivery == "norsu":
                 action = nocache_delivery(env)
             elif delivery == "drl":
                 action = agent.act(state, inference=True)
@@ -83,9 +97,23 @@ def main(cache, delivery, cache_size):
             global_total_hits += total_hits
             global_total_success += total_success
 
+            round_total_request += total_request
+            round_total_hits += total_hits
+            round_total_success += total_success
+
             delay_tracking.append(avg_delay)
 
             state = next_state
+
+        round_avg_delay = (
+            sum(delay_tracking[-args.time_step_per_round :]) / args.time_step_per_round
+        )
+        round_hit_ratio = round_total_hits / round_total_request
+        round_success_ratio = round_total_success / round_total_request
+
+        round_avg_delay_tracking.append(round_avg_delay)
+        round_hit_ratio_tracking.append(round_hit_ratio)
+        round_success_ratio_tracking.append(round_success_ratio)
 
     # save the results as json
     results = {
@@ -93,6 +121,10 @@ def main(cache, delivery, cache_size):
         "total_hits": global_total_hits,
         "total_success": global_total_success,
         "delay_tracking": delay_tracking,
+        "round_avg_delay_tracking": round_avg_delay_tracking,
+        "round_hit_ratio_tracking": round_hit_ratio_tracking,
+        "round_success_ratio_tracking": round_success_ratio_tracking,
+        "args": args.__dict__,
     }
     save_dir = os.path.join(
         "results",
@@ -102,9 +134,19 @@ def main(cache, delivery, cache_size):
 
 
 if __name__ == "__main__":
-    for cache_size in [25, 50, 75, 100, 125, 150, 175, 200]:
-        for cache in ["random", "mcfed", "avgfed"]:
-            for delivery in ["random", "greedy", "drl"]:
-                if cache in ["random", "avgfed"] and delivery != "drl":
+    for cache_size in [5, 10, 30, 50, 80, 100]:
+        for cache in [
+            "random",
+            "mcfed",
+            "avgfed",
+            "nocache",
+        ]:
+            for delivery in ["random", "greedy", "drl", "norsu"]:
+                if cache in ["random", "avgfed", "nocache"] and delivery not in [
+                    "drl",
+                    "norsu",
+                ]:
+                    continue
+                if delivery == "norsu" and cache != "random":
                     continue
                 main(cache, delivery, cache_size)
