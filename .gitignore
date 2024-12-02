@@ -8,4 +8,8 @@ logs
 wandb
 test.ipynb
 test.py
-results
+results_False
+results_True
+model_true.pth
+model_false.pth
+csv

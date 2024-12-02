@@ -11,8 +11,8 @@ from module.bdqn import BDQNAgent
 from simulation import Environment
 from utils import load_args, save_results
 
-torch.manual_seed(0)
-np.random.seed(0)
+torch.manual_seed(2)
+np.random.seed(2)
 
 
 args, configs = load_args()
@@ -50,7 +50,7 @@ def main(cache, delivery, cache_size):
     )
 
     # Load the weights
-    load_weights(agent, "./model.pth")
+    load_weights(agent, "./model_true.pth")
 
     delay_tracking = []
     round_avg_delay_tracking = []
@@ -127,21 +127,34 @@ def main(cache, delivery, cache_size):
         "args": args.__dict__,
     }
     save_dir = os.path.join(
-        "results",
+        f"results_{args.interruption}",
         f"[{created_at}] {args.num_rsu}_{args.rsu_capacity}_{args.num_vehicle}_{cache}_{delivery}",
     )
     save_results(save_dir, cache, delivery, results)
 
 
 if __name__ == "__main__":
-    for cache_size in [5, 10, 30, 50, 80, 100]:
+    for cache_size in [
+        # 50,
+        # 75,
+        100,
+        # 125,
+        # 150,
+        # 175,
+        # 200,
+    ]:
         for cache in [
-            "random",
+            # "random",
             "mcfed",
-            "avgfed",
+            # "avgfed",
             # "nocache",
         ]:
-            for delivery in ["random", "greedy", "drl", "norsu"]:
+            for delivery in [
+                # "random",
+                # "greedy",
+                "drl",
+                # "norsu"
+            ]:
                 if cache in ["random", "avgfed", "nocache"] and delivery not in [
                     "drl",
                     "norsu",

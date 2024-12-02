@@ -134,7 +134,7 @@ class Mobility:
                 self.request[idx][reg] = 1
         else:
             total_content = list(range(self.library.num_items))
-            prob = (0.5, 0.3, 0.2)
+            prob = (0.9, 0.1, 0)
             cached = []
 
             for r in self.rsu:

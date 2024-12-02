@@ -7,11 +7,11 @@ logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboar
 # Simulation settings
 num_rsu: 3  # Number of RSUs (Road Side Units)
 num_vehicle: 30  # Total number of vehicles in the simulation
-time_step_per_round: 60  # Duration of each round in time steps
+time_step_per_round: 50  # Duration of each round in time steps
 num_rounds: 30  # Total number of rounds for the simulation
 content_size: 4000000  # Size of content in bytes (4e6)
 deadline: 1  # Deadline for content delivery in seconds
-interruption: false  # Whether to allow interruptions or not
+interruption: true  # Whether to allow interruptions or not
 
 # Mobility settings
 min_velocity: 5  # Minimum speed of vehicles
@@ -27,9 +27,9 @@ max_connections: 10  # Maximum simultaneous connections
 
 # FL (Federated Learning) settings
 num_clusters: 3  # Number of clusters in FL
-num_local_epochs: 20  # Number of local training epochs
+num_local_epochs: 100  # Number of local training epochs
 parallel_update: false  # Whether to use parallel updates or not
-fl_hidden_dim: 64  # Hidden dimension for the neural network
+fl_hidden_dim: 128  # Hidden dimension for the neural network
 
 # DRL (Deep Reinforcement Learning) settings
 episodes: 200  # Number of episodes to run
@@ -45,7 +45,7 @@ training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99999  # Decay rate for exploration
 epsilon_min: 0.02 # Minimum value for epsilon
 alpha1: 100  # Alpha parameter for avg delay
-alpha2: 1 # Beta parameter for the hit ratio
+alpha2: 10 # Beta parameter for the hit ratio
 alpha3: 1  # Mu parameter for the the success ratio
 alpha4: 1 # penalty
 baseline: 30  # Baseline value for the reward
