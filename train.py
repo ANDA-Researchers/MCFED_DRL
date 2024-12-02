@@ -123,7 +123,7 @@ def main():
 
         # Save args as json
         with open(os.path.join(save_dir, "args.json"), "w") as file:
-            json.dump(vars(args), file, indent=4)
+            json.dump(configs, file, indent=4)
 
 
 if __name__ == "__main__":
