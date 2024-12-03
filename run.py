@@ -11,9 +11,6 @@ from module.bdqn import BDQNAgent
 from simulation import Environment
 from utils import load_args, save_results
 
-torch.manual_seed(2)
-np.random.seed(2)
-
 
 args, configs = load_args()
 
@@ -22,11 +19,12 @@ def load_weights(agent: BDQNAgent, path):
     agent.policy_net.load_state_dict(torch.load(path, weights_only=True))
 
 
-def main(cache, delivery, cache_size):
+def main(cache, delivery, cache_size, vehicle_num):
 
     created_at = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
 
     args.rsu_capacity = cache_size
+    args.num_vehicle = vehicle_num
 
     env = Environment(
         args=args,
@@ -136,30 +134,38 @@ def main(cache, delivery, cache_size):
 if __name__ == "__main__":
     for cache_size in [
         # 50,
-        # 75,
         100,
-        # 125,
         # 150,
-        # 175,
         # 200,
+        # 250,
+        # 300,
     ]:
-        for cache in [
-            # "random",
-            "mcfed",
-            # "avgfed",
-            # "nocache",
+        for vehicle_num in [
+            # 10,
+            30,
+            # 50,
+            # 70,
+            # 90,
+            # 110
         ]:
-            for delivery in [
-                # "random",
-                # "greedy",
-                "drl",
-                # "norsu"
+            for cache in [
+                "random",
+                "mcfed",
+                "avgfed",
+                "nocache",
             ]:
-                if cache in ["random", "avgfed", "nocache"] and delivery not in [
+                for delivery in [
+                    "random",
+                    "greedy",
                     "drl",
                     "norsu",
                 ]:
-                    continue
-                if delivery == "norsu" and cache != "random":
-                    continue
-                main(cache, delivery, cache_size)
+                    if cache in ["random", "avgfed", "nocache"] and delivery not in [
+                        "drl",
+                        "norsu",
+                        "greedy",
+                    ]:
+                        continue
+                    if delivery == "norsu" and cache != "random":
+                        continue
+                    main(cache, delivery, cache_size, vehicle_num)

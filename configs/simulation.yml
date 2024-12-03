@@ -1,5 +1,5 @@
 # Run mode
-run_mode: "simulation"  # 'simulation' or 'train'
+run_mode: "train"  # 'simulation' or 'train'
 
 # Loggers
 logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
@@ -37,7 +37,7 @@ device: "cuda"  # Device to use for training (e.g., 'cuda' or 'cpu')
 train_every: 1 # Frequency of training the agent
 batch_size: 128  # Size of training batches
 gamma: 0.99  # Discount factor for future rewards
-lr: 0.00001  # Learning rate
+lr: 0.0001  # Learning rate
 capacity: 1800000  # Capacity for training
 hidden_dim: 128  # Hidden dimension for the neural network
 target_update: 1000   # Frequency of target network updates
@@ -45,8 +45,8 @@ training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99999  # Decay rate for exploration
 epsilon_min: 0.02 # Minimum value for epsilon
 alpha1: 100  # Alpha parameter for avg delay
-alpha2: 10 # Beta parameter for the hit ratio
-alpha3: 1  # Mu parameter for the the success ratio
+alpha2: 100 # Beta parameter for the hit ratio
+alpha3: 30  # Mu parameter for the the success ratio
 alpha4: 1 # penalty
-baseline: 30  # Baseline value for the reward
+baseline: 0 # Baseline value for the reward
 tau: 0.001  # Tau parameter for soft update
