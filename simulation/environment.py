@@ -118,11 +118,15 @@ class Environment:
                 if not local_interrupted:
                     delays.append(rsu_delay + backhaul_delay)
                 else:
-                    delays.append(bs_delay)  # Fallback to BS
+                    delays.append(
+                        bs_delay + self.args.connection_switch_delay
+                    )  # Fallback to BS
                     total_fails += 1
             else:
                 if local_interrupted:
-                    delays.append(bs_delay)  # Fallback to BS
+                    delays.append(
+                        bs_delay + self.args.connection_switch_delay
+                    )  # Fallback to BS
                     total_fails += 1
                 else:
                     # get the interruption status of the current rsu

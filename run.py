@@ -11,6 +11,9 @@ from module.bdqn import BDQNAgent
 from simulation import Environment
 from utils import load_args, save_results
 
+# torch.manual_seed(2)
+# np.random.seed(2)
+
 
 args, configs = load_args()
 
@@ -48,7 +51,7 @@ def main(cache, delivery, cache_size, vehicle_num):
     )
 
     # Load the weights
-    load_weights(agent, "./model_true.pth")
+    load_weights(agent, f"./model_{args.interruption}.pth")
 
     delay_tracking = []
     round_avg_delay_tracking = []
@@ -133,12 +136,12 @@ def main(cache, delivery, cache_size, vehicle_num):
 
 if __name__ == "__main__":
     for cache_size in [
-        # 50,
+        50,
         100,
-        # 150,
-        # 200,
-        # 250,
-        # 300,
+        150,
+        200,
+        250,
+        300,
     ]:
         for vehicle_num in [
             # 10,
@@ -163,7 +166,7 @@ if __name__ == "__main__":
                     if cache in ["random", "avgfed", "nocache"] and delivery not in [
                         "drl",
                         "norsu",
-                        "greedy",
+                        # "greedy",
                     ]:
                         continue
                     if delivery == "norsu" and cache != "random":

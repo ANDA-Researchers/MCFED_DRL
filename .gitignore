@@ -10,6 +10,6 @@ test.ipynb
 test.py
 results_False
 results_True
-model_true.pth
-model_false.pth
+model_True.pth
+model_False.pth
 csv

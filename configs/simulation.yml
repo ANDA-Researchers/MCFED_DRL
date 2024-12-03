@@ -1,5 +1,5 @@
 # Run mode
-run_mode: "train"  # 'simulation' or 'train'
+run_mode: "simulation"  # 'simulation' or 'train'
 
 # Loggers
 logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
@@ -7,8 +7,8 @@ logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboar
 # Simulation settings
 num_rsu: 3  # Number of RSUs (Road Side Units)
 num_vehicle: 30  # Total number of vehicles in the simulation
-time_step_per_round: 50  # Duration of each round in time steps
-num_rounds: 30  # Total number of rounds for the simulation
+time_step_per_round: 60  # Duration of each round in time steps
+num_rounds: 10  # Total number of rounds for the simulation
 content_size: 4000000  # Size of content in bytes (4e6)
 deadline: 1  # Deadline for content delivery in seconds
 interruption: true  # Whether to allow interruptions or not
@@ -24,6 +24,7 @@ rsu_capacity: 200  # Maximum capacity of RSUs
 cloud_rate: 50000000  # Cloud connection rate (100e6)
 fiber_rate: 100000000  # Fiber optic connection rate (150e6)
 max_connections: 10  # Maximum simultaneous connections
+connection_switch_delay: 0.03
 
 # FL (Federated Learning) settings
 num_clusters: 3  # Number of clusters in FL
@@ -37,16 +38,16 @@ device: "cuda"  # Device to use for training (e.g., 'cuda' or 'cpu')
 train_every: 1 # Frequency of training the agent
 batch_size: 128  # Size of training batches
 gamma: 0.99  # Discount factor for future rewards
-lr: 0.0001  # Learning rate
+lr: 0.00001  # Learning rate
 capacity: 1800000  # Capacity for training
 hidden_dim: 128  # Hidden dimension for the neural network
 target_update: 1000   # Frequency of target network updates
 training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99999  # Decay rate for exploration
 epsilon_min: 0.02 # Minimum value for epsilon
-alpha1: 100  # Alpha parameter for avg delay
-alpha2: 100 # Beta parameter for the hit ratio
-alpha3: 30  # Mu parameter for the the success ratio
-alpha4: 1 # penalty
+alpha1: 100  # avg delay
+alpha2: 100 # hit ratio
+alpha3: 30  # success ratio
+alpha4: 10 # penalty
 baseline: 0 # Baseline value for the reward
 tau: 0.001  # Tau parameter for soft update
