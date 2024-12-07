@@ -1,12 +1,12 @@
 # Run mode
-run_mode: "simulation"  # 'simulation' or 'train'
+run_mode: "train"  # 'simulation' or 'train'
 
 # Loggers
 logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
 
 # Simulation settings
 num_rsu: 3  # Number of RSUs (Road Side Units)
-num_vehicle: 30  # Total number of vehicles in the simulation
+num_vehicle: 90  # Total number of vehicles in the simulation
 time_step_per_round: 60  # Duration of each round in time steps
 num_rounds: 10  # Total number of rounds for the simulation
 content_size: 4000000  # Size of content in bytes (4e6)
@@ -45,9 +45,9 @@ target_update: 1000   # Frequency of target network updates
 training_steps: 3000 # Total training steps per episode
 epsilon_decay: 0.99999  # Decay rate for exploration
 epsilon_min: 0.02 # Minimum value for epsilon
-alpha1: 100  # avg delay
+alpha1: 1000  # avg delay
 alpha2: 100 # hit ratio
 alpha3: 30  # success ratio
 alpha4: 10 # penalty
-baseline: 0 # Baseline value for the reward
+baseline: 200 # Baseline value for the reward
 tau: 0.001  # Tau parameter for soft update

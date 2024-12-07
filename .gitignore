@@ -3,7 +3,6 @@ __pycache__
 data/glove.6B/*
 data/*
 !data/emb.json
-TODO.txt
 logs
 wandb
 test.ipynb
