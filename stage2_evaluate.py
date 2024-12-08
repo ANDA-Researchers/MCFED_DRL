@@ -130,7 +130,7 @@ def main(cache, delivery, cache_size, vehicle_num, _lambda):
     }
     save_dir = os.path.join(
         f"results_{args.interruption}",
-        f"[{created_at}] {args.num_rsu}_{args.rsu_capacity}_{args.num_vehicle}_{cache}_{delivery}",
+        f"[{created_at}] {_lambda}_{args.num_rsu}_{args.rsu_capacity}_{args.num_vehicle}_{cache}_{delivery}",
     )
     save_results(save_dir, cache, delivery, results)
 
