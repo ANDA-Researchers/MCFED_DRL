@@ -3,12 +3,12 @@ __pycache__
 data/glove.6B/*
 data/*
 !data/emb.json
+TODO.txt
 logs
 wandb
 test.ipynb
 test.py
 results_False
 results_True
-model_True.pth
-model_False.pth
 csv
+models
