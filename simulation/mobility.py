@@ -32,6 +32,7 @@ class Mobility:
         self.device = args.device
         self.run_mode = args.run_mode
         self.interruption = args.interruption
+        self._lambda = args._lambda
 
         assert (
             self.length % self.rsu_coverage == 0
@@ -68,6 +69,7 @@ class Mobility:
                 model,
                 self.library.num_items,
                 self.interruption,
+                self._lambda,
             )
             self.rsu.append(new_rsu)
 

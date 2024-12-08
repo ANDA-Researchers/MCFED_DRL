@@ -22,12 +22,13 @@ def load_weights(agent: BDQNAgent, path):
     agent.policy_net.load_state_dict(torch.load(path, weights_only=True))
 
 
-def main(cache, delivery, cache_size, vehicle_num):
+def main(cache, delivery, cache_size, vehicle_num, _lambda):
 
     created_at = datetime.datetime.now().strftime(f"%Y%m%d-%H%M%S")
 
     args.rsu_capacity = cache_size
     args.num_vehicle = vehicle_num
+    args._lambda = _lambda
 
     env = Environment(
         args=args,
@@ -51,7 +52,7 @@ def main(cache, delivery, cache_size, vehicle_num):
     )
 
     # Load the weights
-    load_weights(agent, f"./model_{args.interruption}.pth")
+    load_weights(agent, f"./model_{args.interruption}_{vehicle_num}.pth")
 
     delay_tracking = []
     round_avg_delay_tracking = []
@@ -135,40 +136,45 @@ def main(cache, delivery, cache_size, vehicle_num):
 
 
 if __name__ == "__main__":
-    for cache_size in [
-        50,
-        100,
-        150,
-        200,
-        250,
-        300,
-    ]:
-        for vehicle_num in [
-            # 10,
-            30,
+    for _lambda in [1.011, 1.012, 1.013, 1.014]:
+        for cache_size in [
             # 50,
-            # 70,
-            # 90,
-            # 110
+            100,
+            # 150,
+            # 200,
+            # 250,
+            # 300,
         ]:
-            for cache in [
-                "random",
-                "mcfed",
-                "avgfed",
-                "nocache",
+            for vehicle_num in [
+                # 10,
+                30,
+                # 50,
+                # 70,
+                # 90,
+                # 110,
             ]:
-                for delivery in [
+                for cache in [
                     "random",
-                    "greedy",
-                    "drl",
-                    "norsu",
+                    "mcfed",
+                    "avgfed",
+                    "nocache",
                 ]:
-                    if cache in ["random", "avgfed", "nocache"] and delivery not in [
+                    for delivery in [
+                        "random",
+                        "greedy",
                         "drl",
                         "norsu",
-                        # "greedy",
                     ]:
-                        continue
-                    if delivery == "norsu" and cache != "random":
-                        continue
-                    main(cache, delivery, cache_size, vehicle_num)
+                        if cache in [
+                            "random",
+                            "avgfed",
+                            "nocache",
+                        ] and delivery not in [
+                            "drl",
+                            "norsu",
+                            # "greedy",
+                        ]:
+                            continue
+                        if delivery == "norsu" and cache != "random":
+                            continue
+                        main(cache, delivery, cache_size, vehicle_num, _lambda)

@@ -4,14 +4,14 @@ from .interrupt import Interrupt
 
 class RSU:
     def __init__(
-        self, position: tuple, capacity: int, model, num_items, interruption
+        self, position: tuple, capacity: int, model, num_items, interruption, _lambda
     ) -> None:
         self.position = position
         self.capacity = capacity
         self.cache = np.random.randint(0, num_items, capacity)
         self.model = model
         self.cluster = None
-        self.interrupt = Interrupt(enable=interruption)
+        self.interrupt = Interrupt(enable=interruption, probs=_lambda)
         self.interrupt.reset()
 
     def had(self, data: int) -> bool:
