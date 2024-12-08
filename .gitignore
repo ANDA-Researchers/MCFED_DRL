@@ -8,7 +8,5 @@ logs
 wandb
 test.ipynb
 test.py
-results_False
-results_True
 csv
 models
