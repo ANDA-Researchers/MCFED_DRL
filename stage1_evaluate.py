@@ -16,12 +16,16 @@ from simulation.library import Library
 
 
 class FedModel(nn.Module):
-    def __init__(self, hidden_dim, num_items):
+    def __init__(self, hidden_dim, num_items, feature_dim):
         super(FedModel, self).__init__()
         self.user_embedding = nn.Parameter(torch.randn(1, hidden_dim))
         self.item_embedding = nn.Embedding(num_items, hidden_dim)
         self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, 1)
+
+        self.bi_lstm = nn.LSTM(
+            feature_dim, hidden_dim, batch_first=True, bidirectional=True
+        )
 
     def forward(self, item_id):
         user_embedding = self.user_embedding.repeat(item_id.shape[0], 1)
@@ -34,12 +38,16 @@ class FedModel(nn.Module):
 
 
 class CentralizedModel(nn.Module):
-    def __init__(self, hidden_dim, num_items, num_users):
+    def __init__(self, hidden_dim, num_items, num_users, feature_dim):
         super(CentralizedModel, self).__init__()
         self.user_embedding = nn.Embedding(num_users, hidden_dim)
         self.item_embedding = nn.Embedding(num_items, hidden_dim)
         self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, 1)
+
+        self.bi_lstm = nn.LSTM(
+            feature_dim, hidden_dim, batch_first=True, bidirectional=True
+        )
 
     def forward(self, user_id, item_id):
         user_embedding = self.user_embedding(user_id)
@@ -49,6 +57,10 @@ class CentralizedModel(nn.Module):
         x = self.fc2(x)
         x = torch.sigmoid(x).squeeze(-1)
         return x
+
+
+def weights_averaging(models, weights, do_clustering=False):
+    pass
 
 
 def custom_train_test_split(data, ratio):
@@ -97,6 +109,17 @@ def custom_train_loop(
     return model
 
 
+def preprocess(uid, r_i, Y, urh):
+    dataset = []
+    for pivot in range(len(urh)):
+        item_id = r_i[pivot]
+        rating = r_i[pivot]
+        h = Y[urh[:pivot]]
+        dataset.append((uid, item_id, h, rating))
+
+    train, test = custom_train_test_split(dataset, args.train_ratio)
+
+
 if __name__ == "__main__":
 
     library = Library()
@@ -105,6 +128,4 @@ if __name__ == "__main__":
 
     uid, r_i, Y, urh, upi = library.create_client()
 
-    train, test = custom_train_test_split(urh, 0.95)
-
-    print(len(train), len(test))
+    dataset = preprocess(uid, r_i, Y, urh)
