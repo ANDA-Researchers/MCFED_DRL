@@ -5,16 +5,21 @@ import copy
 
 
 class Library:
-    def __init__(self) -> None:
+    def __init__(self, semantic=True) -> None:
         user_data, item_data, rating_data, user_request_sequences = get_data()
 
         self.num_users = len(user_data)
         self.num_items = len(item_data)
 
         # Create item latent matrix Y
-        self.Y = torch.tensor(
-            np.array(item_data[["semantic"]].values.tolist()), dtype=torch.float32
-        ).squeeze()
+        if semantic:
+            self.Y = torch.tensor(
+                np.array(item_data[["semantic"]].values.tolist()), dtype=torch.float32
+            ).squeeze()
+        else:
+            self.Y = torch.tensor(
+                np.array(item_data[["sparse"]].values.tolist()), dtype=torch.float32
+            ).squeeze()
 
         # Create user-item interaction matrix R
         self.R = torch.zeros(self.num_users, self.num_items)
