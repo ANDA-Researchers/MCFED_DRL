@@ -15,9 +15,12 @@ args_parser = argparse.ArgumentParser()
 args_parser.add_argument("--num_clients", type=int, default=10)
 args_parser.add_argument("--train_ratio", type=float, default=0.8)
 args_parser.add_argument("--device", type=str, default="cuda")
-args_parser.add_argument("--temporal", type=bool, default=True)
-args_parser.add_argument("--use_semantic", type=bool, default=False)
-args_parser.add_argument("--num_clusters", type=int, default=3)
+args_parser.add_argument("--temporal", action="store_true")
+args_parser.add_argument("--use_semantic", action="store_true")
+args_parser.add_argument("--num_clusters", type=int, default=2)
+args_parser.add_argument("--runs", type=int, default=5)
+args_parser.add_argument("--learning_rate", type=float, default=0.001)
+args_parser.add_argument("--batch_size", type=int, default=32)
 args = args_parser.parse_args()
 
 
@@ -106,7 +109,6 @@ def weights_averaging(models, weights, do_clustering=False):
     if do_clustering:
         new_models = []
         clusters, _, _ = clustering(args.num_clusters, weights)
-        averaged_weights = []
         for cluster in clusters:
             cluster_weights = [weights[i] for i in cluster]
             cluster_models = [models[i] for i in cluster]
@@ -141,7 +143,7 @@ def custom_train_loop(
     y_train,
     num_epochs,
     batch_size,
-    patience=5,
+    patience=10,
     early_stopping=True,
     device="cpu",
 ):
@@ -152,7 +154,9 @@ def custom_train_loop(
         model.train()
         train_loss = 0
 
-        for i in range(0, len(y_train), batch_size):
+        for i in tqdm(
+            range(0, len(y_train), batch_size), desc=f"Epoch {epoch}", leave=False
+        ):
             item_ids = X_train["item_id"][i : i + batch_size].to(device)
             user_ids = X_train["user_id"][i : i + batch_size].to(device)
             history = batch_padding(X_train["history"][i : i + batch_size]).to(device)
@@ -221,13 +225,14 @@ def preprocess(uid, r_i, Y, urh):
     }, torch.tensor(ratings)
 
 
-def eval_mcfed(library, avg=False):
+def eval_mcfed(library, client_data, avg=False):
     num_items = library.num_items
     num_users = library.num_users
     num_clients = args.num_clients
     feature_dim = 50 if args.use_semantic else 19
     errors = []
-    for _ in tqdm(range(10), desc="Evaluating..."):
+    for _ in tqdm(range(args.runs), desc="Evaluating..."):
+        library.reset()
         models = []
         weights = []
         y_true = []
@@ -237,15 +242,15 @@ def eval_mcfed(library, avg=False):
         X_test = []
         y_test = []
 
-        for client in range(num_clients):
+        for client in tqdm(range(num_clients), desc="Handling clients...", leave=False):
             model = FedModel(
-                hidden_dim=64,
+                hidden_dim=128,
                 num_items=num_items,
                 feature_dim=feature_dim,
                 temporal=args.temporal,
             ).to(args.device)
 
-            uid, r_i, Y, urh, upi = library.create_client()
+            uid, r_i, Y, urh, upi = client_data[client]
             inputs, outputs = preprocess(uid, r_i, Y, urh)
             sub_X_train, sub_X_test, sub_y_train, sub_y_test = custom_train_test_split(
                 inputs, outputs, args.train_ratio
@@ -254,7 +259,7 @@ def eval_mcfed(library, avg=False):
             y_train.append(sub_y_train)
             X_test.append(sub_X_test)
             y_test.append(sub_y_test)
-            optimizer = optim.Adam(model.parameters(), lr=0.001)
+            optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
             criterion = nn.MSELoss()
 
             model = custom_train_loop(
@@ -264,7 +269,7 @@ def eval_mcfed(library, avg=False):
                 sub_X_train,
                 sub_y_train,
                 num_epochs=100,
-                batch_size=128,
+                batch_size=args.batch_size,
                 device=args.device,
             )
             upi = upi.clone().detach().to(args.device)
@@ -278,7 +283,11 @@ def eval_mcfed(library, avg=False):
         for i in range(num_clients):
             model = models[i]
             sub_y_true, sub_y_pred = evaluate(
-                model, X_test[i], y_test[i], batch_size=32, device=args.device
+                model,
+                X_test[i],
+                y_test[i],
+                batch_size=args.batch_size,
+                device=args.device,
             )
 
             y_true.extend(sub_y_true)
@@ -293,26 +302,27 @@ def eval_mcfed(library, avg=False):
     print(f"Mean RMSE: {mean_rmse} - Std RMSE: {std_rmse}")
 
 
-def eval_avgfed(library):
-    eval_mcfed(library, avg=True)
+def eval_avgfed(library, client_data):
+    eval_mcfed(library, client_data, avg=True)
 
 
-def eval_centralized(library):
+def eval_centralized(library, client_data):
     num_items = library.num_items
     num_users = library.num_users
     num_clients = args.num_clients
     feature_dim = 50 if args.use_semantic else 19
     errors = []
-    for _ in tqdm(range(10), desc="Evaluating..."):
+    for _ in tqdm(range(args.runs), desc="Evaluating..."):
+        library.reset()
         model = CentralizedModel(
-            hidden_dim=64,
+            hidden_dim=128,
             num_items=num_items,
             num_users=num_users,
             feature_dim=feature_dim,
             temporal=args.temporal,
         ).to(args.device)
 
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
+        optimizer = optim.Adam(model.parameters(), lr=0.01)
         criterion = nn.MSELoss()
 
         X_train = {}
@@ -320,8 +330,8 @@ def eval_centralized(library):
         X_test = {}
         y_test = []
 
-        for client in range(num_clients):
-            uid, r_i, Y, urh, upi = library.create_client()
+        for client in tqdm(range(num_clients), desc="Handling clients...", leave=False):
+            uid, r_i, Y, urh, upi = client_data[client]
             inputs, outputs = preprocess(uid, r_i, Y, urh)
             sub_X_train, sub_X_test, sub_y_train, sub_y_test = custom_train_test_split(
                 inputs, outputs, args.train_ratio
@@ -354,12 +364,12 @@ def eval_centralized(library):
             X_train,
             y_train,
             num_epochs=100,
-            batch_size=128,
+            batch_size=args.batch_size,
             device=args.device,
         )
 
         y_true, y_pred = evaluate(
-            model, X_test, y_test, batch_size=32, device=args.device
+            model, X_test, y_test, batch_size=args.batch_size, device=args.device
         )
         rmse = root_mean_squared_error(y_true, y_pred)
         errors.append(rmse)
@@ -373,9 +383,15 @@ def eval_centralized(library):
 if __name__ == "__main__":
 
     library = Library(semantic=args.use_semantic)
+    client_data = []
+    for client in range(args.num_clients):
+        uid, r_i, Y, urh, upi = library.create_client()
+        client_data.append((uid, r_i, Y, urh, upi))
+    print("====================================")
+    print(args)
     print("Centralized Training")
-    eval_centralized(library)
+    eval_centralized(library, client_data)
     print("Average Fed Training")
-    eval_avgfed(library)
+    eval_avgfed(library, client_data)
     print("MC Fed Training")
-    eval_mcfed(library)
+    eval_mcfed(library, client_data)

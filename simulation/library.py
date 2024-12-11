@@ -36,9 +36,13 @@ class Library:
         self.unavailable_users = []
 
     def create_client(self):
-        uid = np.random.choice(
-            [i for i in range(self.num_users) if i not in self.unavailable_users]
-        )
+
+        user_request_counts = [len(x) for x in self.user_request_history]
+        available_users = [
+            i for i in range(self.num_users) if i not in self.unavailable_users
+        ]
+        uid = max(available_users, key=lambda x: user_request_counts[x])
+
         self.unavailable_users.append(uid)
 
         r_i = self.R[uid]

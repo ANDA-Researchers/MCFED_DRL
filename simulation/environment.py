@@ -84,6 +84,8 @@ class Environment:
                 total_exceed += int(connection_count[i] - max_connection)
             self.rsu[i].step(power)
 
+        connection_count = torch.zeros(self.args.num_rsu, dtype=torch.int32)
+
         for vehicle_idx in request_vehicles:
             # Get vehicle wireless rate
             bs_rate = self.channel.data_rate[vehicle_idx][0]
@@ -116,6 +118,7 @@ class Environment:
                 vehicle_action == self.args.num_rsu + 1
             ):  # Download from the BS via local RSU
                 if not local_interrupted:
+                    connection_count[local_rsu] += 1
                     delays.append(rsu_delay + backhaul_delay)
                 else:
                     delays.append(
@@ -129,25 +132,29 @@ class Environment:
                     )  # Fallback to BS
                     total_fails += 1
                 else:
-                    # get the interruption status of the current rsu
-                    current_interrupted = self.rsu[current_rsu].is_interrupt()
-                    if current_interrupted:
-                        delays.append(
-                            rsu_delay + backhaul_delay
-                        )  # Fallback to BS via local RSU
-                    else:
-                        if self.rsu[current_rsu].had(requested):
-                            delay = rsu_delay
-                            total_hits += 1
-                            if local_rsu != current_rsu:
-                                hop = abs(local_rsu - current_rsu)
-                                delay += hop * fiber_delay
-                            delays.append(delay)
-                        else:
+                    if connection_count[local_rsu] < max_connection:
+                        connection_count[local_rsu] += 1
+                        # get the interruption status of the current rsu
+                        current_interrupted = self.rsu[current_rsu].is_interrupt()
+                        if current_interrupted:
                             delays.append(
                                 rsu_delay + backhaul_delay
                             )  # Fallback to BS via local RSU
-
+                        else:
+                            if self.rsu[current_rsu].had(requested):
+                                delay = rsu_delay
+                                total_hits += 1
+                                if local_rsu != current_rsu:
+                                    hop = abs(local_rsu - current_rsu)
+                                    delay += hop * fiber_delay
+                                delays.append(delay)
+                            else:
+                                delays.append(
+                                    rsu_delay + backhaul_delay
+                                )  # Fallback to BS via local RSU
+                    else:
+                        delays.append(bs_delay + self.args.connection_switch_delay)
+                        total_fails += 1
         # compute the average delay, hit ratio, and success ratio
         avg_delay = np.mean(delays)
 

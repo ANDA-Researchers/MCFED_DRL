@@ -136,34 +136,39 @@ def main(cache, delivery, cache_size, vehicle_num, _lambda):
 
 
 if __name__ == "__main__":
-    for _lambda in [1.011, 1.012, 1.013, 1.014]:
+    for _lambda in [
+        # 1.011,
+        # 1.012,
+        # 1.013,
+        1.014
+    ]:
         for cache_size in [
             # 50,
-            100,
+            # 100,
             # 150,
             # 200,
             # 250,
-            # 300,
+            300,
         ]:
             for vehicle_num in [
                 # 10,
-                30,
-                # 50,
-                # 70,
-                # 90,
-                # 110,
+                # 30,
+                50,
+                70,
+                90,
+                110,
             ]:
                 for cache in [
-                    "random",
+                    # "random",
                     "mcfed",
-                    "avgfed",
-                    "nocache",
+                    # "avgfed",
+                    # "nocache",
                 ]:
                     for delivery in [
                         "random",
-                        "greedy",
-                        "drl",
-                        "norsu",
+                        # "greedy",
+                        # "drl",
+                        # "norsu",
                     ]:
                         if cache in [
                             "random",

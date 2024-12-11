@@ -22,7 +22,7 @@ class Interrupt(object):
     def sample_interrupt(self, power):
         interrupt_prob = (self.state**power - 1) / 100
         rate = np.random.rand()
-
+        print(rate, interrupt_prob)
         if rate < interrupt_prob:
             self.recovery_time = 2
 

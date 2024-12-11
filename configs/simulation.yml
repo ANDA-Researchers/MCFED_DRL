@@ -1,5 +1,5 @@
 # Run mode
-run_mode: "train"  # 'simulation' or 'train'
+run_mode: "simulation"  # 'simulation' or 'train'
 
 # Loggers
 logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboard')
@@ -8,7 +8,7 @@ logger: "tensorboard"  # Logger to use for logging (e.g., 'wandb' or 'tensorboar
 num_rsu: 3  # Number of RSUs (Road Side Units)
 num_vehicle: 90  # Total number of vehicles in the simulation
 time_step_per_round: 60  # Duration of each round in time steps
-num_rounds: 10  # Total number of rounds for the simulation
+num_rounds: 1  # Total number of rounds for the simulation
 content_size: 4000000  # Size of content in bytes (4e6)
 deadline: 1  # Deadline for content delivery in seconds
 interruption: true  # Whether to allow interruptions or not
