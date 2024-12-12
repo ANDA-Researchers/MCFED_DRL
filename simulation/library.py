@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from .dataset import get_data
 import copy
-
+from sklearn.metrics.pairwise import cosine_similarity
 
 class Library:
     def __init__(self, semantic=True) -> None:
@@ -16,10 +16,15 @@ class Library:
             self.Y = torch.tensor(
                 np.array(item_data[["semantic"]].values.tolist()), dtype=torch.float32
             ).squeeze()
+ 
+            
         else:
             self.Y = torch.tensor(
                 np.array(item_data[["sparse"]].values.tolist()), dtype=torch.float32
             ).squeeze()
+        self.Y_similarities = torch.zeros(self.num_items, self.num_items)
+
+        self.Y_similarities = torch.tensor(cosine_similarity(self.Y), dtype=torch.float32)
 
         # Create user-item interaction matrix R
         self.R = torch.zeros(self.num_users, self.num_items)

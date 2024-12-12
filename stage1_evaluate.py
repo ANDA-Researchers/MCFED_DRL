@@ -14,13 +14,14 @@ from utils import average_weights
 args_parser = argparse.ArgumentParser()
 args_parser.add_argument("--num_clients", type=int, default=10)
 args_parser.add_argument("--train_ratio", type=float, default=0.8)
-args_parser.add_argument("--device", type=str, default="cuda")
+args_parser.add_argument("--device", type=str, default="cuda:1")
 args_parser.add_argument("--temporal", action="store_true")
 args_parser.add_argument("--use_semantic", action="store_true")
-args_parser.add_argument("--num_clusters", type=int, default=2)
-args_parser.add_argument("--runs", type=int, default=5)
+args_parser.add_argument("--similarity", action="store_true")
+args_parser.add_argument("--num_clusters", type=int, default=3)
+args_parser.add_argument("--runs", type=int, default=1)
 args_parser.add_argument("--learning_rate", type=float, default=0.001)
-args_parser.add_argument("--batch_size", type=int, default=32)
+args_parser.add_argument("--batch_size", type=int, default=512)
 args = args_parser.parse_args()
 
 
@@ -28,27 +29,38 @@ from simulation.library import Library
 
 
 class FedModel(nn.Module):
-    def __init__(self, hidden_dim, num_items, feature_dim, temporal=False):
+    def __init__(self, hidden_dim, num_items, feature_dim, temporal=False, similarity=False):
         super(FedModel, self).__init__()
         self.user_embedding = nn.Parameter(torch.randn(1, hidden_dim))
         self.item_embedding = nn.Embedding(num_items, hidden_dim)
-        self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, 1)
 
         self.temporal = temporal
+        self.similarity = similarity
+
+        self.extra_dim = 0
 
         if temporal:
             self.bi_lstm = nn.LSTM(
                 feature_dim, hidden_dim, batch_first=True, bidirectional=True
             )
+            self.extra_dim += hidden_dim
+        if similarity:
+            self.similarity_embedding = nn.Linear(num_items, hidden_dim)
+            self.extra_dim += hidden_dim
 
-    def forward(self, user_id, item_id, h):
+        self.fc1 = nn.Linear(hidden_dim * 2 + self.extra_dim, hidden_dim)
+
+    def forward(self, user_id, item_id, h, sim):
         user_embedding = self.user_embedding.repeat(item_id.shape[0], 1)
         item_embedding = self.item_embedding(item_id)
         x = torch.cat([user_embedding, item_embedding], dim=1)
         if self.temporal:
             lstm_out, _ = self.bi_lstm(h)
-            x = x + lstm_out[:, -1, :]
+            x = torch.cat([x, lstm_out[:, -1, :]], dim=1)
+        if self.similarity:
+            sim_embedding = self.similarity_embedding(sim)
+            x = torch.cat([x, sim_embedding], dim=1)   
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         x = torch.sigmoid(x).squeeze(-1)
@@ -59,26 +71,39 @@ class FedModel(nn.Module):
 
 
 class CentralizedModel(nn.Module):
-    def __init__(self, hidden_dim, num_items, num_users, feature_dim, temporal=False):
+    def __init__(self, hidden_dim, num_items, num_users, feature_dim, temporal=False, similarity=False):
         super(CentralizedModel, self).__init__()
         self.user_embedding = nn.Embedding(num_users, hidden_dim)
         self.item_embedding = nn.Embedding(num_items, hidden_dim)
-        self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, 1)
+
         self.temporal = temporal
+        self.similarity = similarity
+        self.extra_dim = 0
 
         if temporal:
             self.bi_lstm = nn.LSTM(
                 feature_dim, hidden_dim, batch_first=True, bidirectional=True
             )
+            self.extra_dim += hidden_dim
 
-    def forward(self, user_id, item_id, h):
+        if similarity:
+            self.similarity_embedding = nn.Linear(num_items, hidden_dim)
+            self.extra_dim += hidden_dim
+
+        self.fc1 = nn.Linear(hidden_dim * 2, hidden_dim)
+
+
+    def forward(self, user_id, item_id, h, sim):
         user_embedding = self.user_embedding(user_id)
         item_embedding = self.item_embedding(item_id)
         x = torch.cat([user_embedding, item_embedding], dim=1)
         if self.temporal:
             lstm_out, _ = self.bi_lstm(h)
-            x = x + lstm_out[:, -1, :]
+            x = torch.cat([x, lstm_out[:, -1, :]], dim=1)
+        if self.similarity:
+            sim_embedding = self.similarity_embedding(sim)
+            x = torch.cat([x, sim_embedding], dim=1)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         x = torch.sigmoid(x).squeeze(-1)
@@ -160,9 +185,10 @@ def custom_train_loop(
             item_ids = X_train["item_id"][i : i + batch_size].to(device)
             user_ids = X_train["user_id"][i : i + batch_size].to(device)
             history = batch_padding(X_train["history"][i : i + batch_size]).to(device)
+            similarity = X_train["similarity"][i : i + batch_size].to(device)
             labels = y_train[i : i + batch_size].to(device)
             optimizer.zero_grad()
-            output = model(user_ids, item_ids, history)
+            output = model(user_ids, item_ids, history, similarity)
             loss = criterion(output, labels)
             loss.backward()
             optimizer.step()
@@ -191,18 +217,20 @@ def evaluate(model, X_test, y_test, batch_size, device="cpu"):
         item_ids = X_test["item_id"][i : i + batch_size].to(device)
         user_ids = X_test["user_id"][i : i + batch_size].to(device)
         history = batch_padding(X_test["history"][i : i + batch_size]).to(device)
+        similarity = X_test["similarity"][i : i + batch_size].to(device)
         labels = y_test[i : i + batch_size].to(device)
-        output = model(user_ids, item_ids, history)
+        output = model(user_ids, item_ids, history, similarity)
         y_true.extend(labels.tolist())
         y_pred.extend(output.tolist())
     return y_true, y_pred
 
 
-def preprocess(uid, r_i, Y, urh):
+def preprocess(uid, r_i, Y, urh, similarites):
     user_ids = []
     items_ids = []
     ratings = []
     history = []
+    sims = []
     feature_dim = 50 if args.use_semantic else 19
 
     start = torch.zeros(feature_dim).unsqueeze(0)
@@ -213,14 +241,17 @@ def preprocess(uid, r_i, Y, urh):
             h = start
         else:
             h = Y[urh[:pivot]]
+        similarity = similarites[item_id]
         user_ids.append(uid)
         items_ids.append(item_id)
         ratings.append(rating)
         history.append(h)
+        sims.append(similarity)
 
     return {
         "user_id": torch.tensor(user_ids),
         "item_id": torch.tensor(items_ids),
+        "similarity": torch.stack(sims),
         "history": history,
     }, torch.tensor(ratings)
 
@@ -248,10 +279,11 @@ def eval_mcfed(library, client_data, avg=False):
                 num_items=num_items,
                 feature_dim=feature_dim,
                 temporal=args.temporal,
+                similarity=args.similarity,
             ).to(args.device)
 
-            uid, r_i, Y, urh, upi = client_data[client]
-            inputs, outputs = preprocess(uid, r_i, Y, urh)
+            uid, r_i, Y, urh, upim, sims = client_data[client]
+            inputs, outputs = preprocess(uid, r_i, Y, urh, sims)
             sub_X_train, sub_X_test, sub_y_train, sub_y_test = custom_train_test_split(
                 inputs, outputs, args.train_ratio
             )
@@ -259,7 +291,7 @@ def eval_mcfed(library, client_data, avg=False):
             y_train.append(sub_y_train)
             X_test.append(sub_X_test)
             y_test.append(sub_y_test)
-            optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+            optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=1e-5)
             criterion = nn.MSELoss()
 
             model = custom_train_loop(
@@ -320,9 +352,10 @@ def eval_centralized(library, client_data):
             num_users=num_users,
             feature_dim=feature_dim,
             temporal=args.temporal,
+            similarity=args.similarity,
         ).to(args.device)
 
-        optimizer = optim.Adam(model.parameters(), lr=0.01)
+        optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
         criterion = nn.MSELoss()
 
         X_train = {}
@@ -331,8 +364,8 @@ def eval_centralized(library, client_data):
         y_test = []
 
         for client in tqdm(range(num_clients), desc="Handling clients...", leave=False):
-            uid, r_i, Y, urh, upi = client_data[client]
-            inputs, outputs = preprocess(uid, r_i, Y, urh)
+            uid, r_i, Y, urh, upi, sims = client_data[client]
+            inputs, outputs = preprocess(uid, r_i, Y, urh, sims)
             sub_X_train, sub_X_test, sub_y_train, sub_y_test = custom_train_test_split(
                 inputs, outputs, args.train_ratio
             )
@@ -351,8 +384,12 @@ def eval_centralized(library, client_data):
         for key in X_train.keys():
             X_train[key] = [X_train[key][i] for i in indices]
             if key != "history":
-                X_train[key] = torch.tensor(X_train[key])
-                X_test[key] = torch.tensor(X_test[key])
+                if key == "similarity":
+                    X_train[key] = torch.stack(X_train[key])
+                    X_test[key] = torch.stack(X_test[key])
+
+                X_train[key] = torch.tensor(np.array(X_train[key]))
+                X_test[key] = torch.tensor(np.array(X_test[key]))
 
         y_train = torch.tensor(y_train)[indices]
         y_test = torch.tensor(y_test)
@@ -386,7 +423,9 @@ if __name__ == "__main__":
     client_data = []
     for client in range(args.num_clients):
         uid, r_i, Y, urh, upi = library.create_client()
-        client_data.append((uid, r_i, Y, urh, upi))
+        similarites = library.Y_similarities
+        client_data.append((uid, r_i, Y, urh, upi, similarites))
+
     print("====================================")
     print(args)
     print("Centralized Training")

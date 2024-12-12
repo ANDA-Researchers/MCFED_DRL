@@ -3,24 +3,30 @@ import signal
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-client_size = [30]
-comb = [("False", "False"), ("True", "False"), ("False", "True"), ("True", "True")]
+client_size = 10
+comb = [
+    ("False", "False"), 
+    ("True", "False"), 
+    ("False", "True"), 
+    ("True", "True")
+    ]
 
 cmds = []
-for size in client_size:
+
+for sim in [False, True]:
     for c in comb:
         cmd = (
-            f"python stage1_evaluate.py --num_clients {size}"
-            + (" --temporal " if c[0] == "True" else "")
+            f"python stage1_evaluate.py --num_clients {client_size}"
+            + (" --similarity " if c[0] == "True" else "")
             + (" --use_semantic " if c[1] == "True" else "")
             + " > "
+            + ("se_" if sim else "nose_")
             + c[0]
             + "_"
             + c[1]
             + f"_{size}.txt"
         )
         cmds.append(cmd)
-
 
 # Function to handle keyboard interrupt
 def signal_handler(sig, frame):
