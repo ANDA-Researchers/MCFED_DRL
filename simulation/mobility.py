@@ -129,36 +129,38 @@ class Mobility:
 
     def update_request(self):
         self.request = np.zeros((self.num_vehicle, self.library.num_items))
+        for idx, v in enumerate(self.vehicle):
+            reg = int(v.request)
+            self.request[idx][reg] = 1
+        # if self.run_mode == "simulation":
+        #     for idx, v in enumerate(self.vehicle):
+        #         reg = int(v.request)
+        #         self.request[idx][reg] = 1
+        # elif self.run_mode == "train":
+        #     total_content = list(range(self.library.num_items))
+        #     prob = (0.7, 0.3, 0)
+        #     cached = []
 
-        if self.run_mode == "simulation":
-            for idx, v in enumerate(self.vehicle):
-                reg = int(v.request)
-                self.request[idx][reg] = 1
-        else:
-            total_content = list(range(self.library.num_items))
-            prob = (0.7, 0.3, 0)
-            cached = []
+        #     for r in self.rsu:
+        #         cached.extend(r.cache)
 
-            for r in self.rsu:
-                cached.extend(r.cache)
+        #     cached = list(set(cached))
+        #     uncached = list(set(total_content) - set(cached))
+        #     for idx, v in enumerate(self.vehicle):
+        #         local_cache = self.rsu[self.reverse_coverage[idx]].cache
 
-            cached = list(set(cached))
-            uncached = list(set(total_content) - set(cached))
-            for idx, v in enumerate(self.vehicle):
-                local_cache = self.rsu[self.reverse_coverage[idx]].cache
+        #         cached_not_local = list(set(cached) - set(local_cache))
 
-                cached_not_local = list(set(cached) - set(local_cache))
+        #         option = np.random.choice([0, 1, 2], p=prob)
 
-                option = np.random.choice([0, 1, 2], p=prob)
+        #         if option == 0:
+        #             reg = np.random.choice(local_cache)
+        #         elif option == 1:
+        #             reg = np.random.choice(cached_not_local)
+        #         else:
+        #             reg = np.random.choice(uncached)
 
-                if option == 0:
-                    reg = np.random.choice(local_cache)
-                elif option == 1:
-                    reg = np.random.choice(cached_not_local)
-                else:
-                    reg = np.random.choice(uncached)
-
-                self.request[idx][reg] = 1
+        #         self.request[idx][reg] = 1
 
     @property
     def storage(self):
